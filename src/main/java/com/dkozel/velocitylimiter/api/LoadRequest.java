@@ -12,7 +12,7 @@ public record LoadRequest(
         @JsonProperty("load_amount") String loadAmount,
         Instant time) {
 
-    LoadCommand toCommand() {
+    public LoadCommand toCommand() {
         if (!loadAmount.startsWith("$")) {
             throw new IllegalArgumentException("load_amount must start with '$': " + loadAmount);
         }

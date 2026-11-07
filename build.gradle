@@ -17,6 +17,11 @@ repositories {
 	mavenCentral()
 }
 
+// Mockito as a -javaagent: self-attaching at runtime is deprecated on recent JDKs and prints a warning
+configurations {
+	mockitoAgent
+}
+
 dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-actuator'
 	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
@@ -27,10 +32,14 @@ dependencies {
 	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-jdbc-test'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+	mockitoAgent('org.mockito:mockito-core') {
+		transitive = false
+	}
 }
 
 tasks.named('test') {
 	useJUnitPlatform()
+	jvmArgs "-javaagent:${configurations.mockitoAgent.asPath}"
 }
 
 // only the executable Spring Boot jar is needed; the extra "-plain" jar would just be ambiguous in the Dockerfile
