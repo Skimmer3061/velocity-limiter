@@ -12,16 +12,19 @@ import java.util.Optional;
 @Service
 public class LoadService {
 
-    private final LoadAttemptRepository repository;
+    private final LoadAttemptRepository loadAttemptRepository;
 
     LoadService(LoadAttemptRepository repository) {
-        this.repository = repository;
+        this.loadAttemptRepository = repository;
     }
 
     @Transactional
     public Optional<LoadDecision> process(LoadCommand command) {
+        if (loadAttemptRepository.exists(command.customerId(), command.id())) {
+            return Optional.empty();
+        }
         boolean accepted = true; // TODO: replace with the velocity rules
-        repository.insert(new LoadAttempt(
+        loadAttemptRepository.insert(new LoadAttempt(
                 command.customerId(), command.id(), command.amount(), command.loadedAt(), accepted));
         return Optional.of(new LoadDecision(command.customerId(), command.id(), accepted));
     }

@@ -15,6 +15,18 @@ public class LoadAttemptRepository {
         this.jdbcClient = jdbcClient;
     }
 
+    public boolean exists(String customerId, String id) {
+        // not SELECT EXISTS: H2 2.4 caches that result per session, so a row inserted in the same transaction is missed
+        return jdbcClient.sql("""
+                        SELECT COUNT(*) FROM load_attempt
+                        WHERE customer_id = :customerId AND id = :id
+                        """)
+                .param("customerId", customerId)
+                .param("id", id)
+                .query(Long.class)
+                .single() > 0;
+    }
+
     public void insert(LoadAttempt attempt) {
         jdbcClient.sql("""
                         INSERT INTO load_attempt (customer_id, id, amount, loaded_at, accepted)
