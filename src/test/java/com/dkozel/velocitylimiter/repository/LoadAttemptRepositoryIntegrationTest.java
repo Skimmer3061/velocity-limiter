@@ -6,6 +6,7 @@ import com.dkozel.velocitylimiter.domain.UsageWindows;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
@@ -24,6 +25,9 @@ class LoadAttemptRepositoryIntegrationTest {
 
     @Autowired
     LoadAttemptRepository repository;
+
+    @Autowired
+    JdbcClient jdbcClient;
 
     @Test
     void sumsOnlyAcceptedLoadsOfTheCustomerInsideEachWindow() {
@@ -50,6 +54,18 @@ class LoadAttemptRepositoryIntegrationTest {
         assertThat(usage.dailyAmount()).isEqualByComparingTo("0");
         assertThat(usage.weeklyAmount()).isEqualByComparingTo("0");
         assertThat(usage.dailyCount()).isZero();
+    }
+
+    @Test
+    void storesTheLargestAmountTheRequestGuardAllows() {
+        // LoadRequest allows at most 17 integer digits because amount is DECIMAL(19,2)
+        insert(CUSTOMER, "1", "99999999999999999.99", "2000-01-05T10:00:00Z", false);
+
+        BigDecimal stored = jdbcClient.sql("SELECT amount FROM load_attempt WHERE customer_id = :customerId")
+                .param("customerId", CUSTOMER)
+                .query(BigDecimal.class)
+                .single();
+        assertThat(stored).isEqualByComparingTo("99999999999999999.99");
     }
 
     private void insert(String customerId, String id, String amount, String time, boolean accepted) {
