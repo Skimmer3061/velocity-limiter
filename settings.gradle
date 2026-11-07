@@ -1,5 +1,5 @@
 plugins {
-	// lets Gradle download the JDK 21 toolchain declared in build.gradle when it isn't installed locally
+	// lets Gradle download the JDK 25 toolchain declared in build.gradle when it isn't installed locally
 	id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
 }
 
