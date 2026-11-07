@@ -1,0 +1,9 @@
+# keep local build output, caches and editor/OS files out of the image build
+build/
+.gradle/
+.git/
+.idea/
+*.iml
+.vscode/
+.DS_Store
+.java-version

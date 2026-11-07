@@ -1,0 +1,6 @@
+services:
+  velocity-limiter:
+    build: .
+    ports:
+      # 127.0.0.1 = reachable only from this machine, not from other devices on the network
+      - "127.0.0.1:8080:8080"

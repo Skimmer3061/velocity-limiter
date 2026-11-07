@@ -28,3 +28,8 @@ dependencies {
 tasks.named('test') {
 	useJUnitPlatform()
 }
+
+// only the executable Spring Boot jar is needed; the extra "-plain" jar would just be ambiguous in the Dockerfile
+tasks.named('jar') {
+	enabled = false
+}
