@@ -3,10 +3,12 @@ package com.dkozel.velocitylimiter.repository;
 import com.dkozel.velocitylimiter.domain.CustomerUsage;
 import com.dkozel.velocitylimiter.domain.LoadAttempt;
 import com.dkozel.velocitylimiter.domain.UsageWindows;
+import com.dkozel.velocitylimiter.domain.Violation;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
 import java.time.ZoneOffset;
+import java.util.Set;
 
 @Repository
 public class LoadAttemptRepository {
@@ -61,5 +63,18 @@ public class LoadAttemptRepository {
                 .param("loadedAt", attempt.loadedAt().atOffset(ZoneOffset.UTC))
                 .param("accepted", attempt.accepted())
                 .update();
+    }
+
+    public void insertViolations(String customerId, String loadId, Set<Violation> violations) {
+        for (Violation violation : violations) {
+            jdbcClient.sql("""
+                            INSERT INTO load_attempt_violation (customer_id, load_id, rule)
+                            VALUES (:customerId, :loadId, :rule)
+                            """)
+                    .param("customerId", customerId)
+                    .param("loadId", loadId)
+                    .param("rule", violation.name())
+                    .update();
+        }
     }
 }
