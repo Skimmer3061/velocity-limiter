@@ -26,14 +26,13 @@ class LoadRequestTest {
     @ParameterizedTest
     @CsvSource({
             "$3318.47, 3318.47",
-            "$100,     100.00",
-            "$0.01,    0.01"
+            "$0.01,    0.01",
+            "$99999999999999999.99, 99999999999999999.99"   // the largest amount DECIMAL(19,2) holds
     })
     void parsesTheDollarAmount(String loadAmount, BigDecimal expected) {
         BigDecimal amount = new LoadRequest("1", "c", loadAmount, TIME).toCommand().amount();
 
-        // compareTo, not equals: "$100" has scale 0, the database returns 100.00 (scale 2)
-        assertThat(amount).isEqualByComparingTo(expected);
+        assertThat(amount).isEqualTo(expected);
     }
 
     @ParameterizedTest
@@ -44,5 +43,21 @@ class LoadRequestTest {
         assertThatThrownBy(request::toCommand)
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("load_amount must start with '$'");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "$0.00", "$-4000.00",           // not positive
+            "$100", "$1.5",                 // fewer than 2 decimals
+            "$1.005", "$5.000",             // more than 2 decimals, even trailing zeros
+            "$1E3", "$+5.00", "$1.", "$.50", // not plain digits
+            "$100000000000000000.00"        // 18 integer digits: does not fit DECIMAL(19,2)
+    })
+    void rejectsAnAmountThatIsNotPositiveWithExactlyTwoDecimals(String loadAmount) {
+        LoadRequest request = new LoadRequest("1", "c", loadAmount, TIME);
+
+        assertThatThrownBy(request::toCommand)
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("load_amount must be a positive amount with exactly 2 decimals");
     }
 }

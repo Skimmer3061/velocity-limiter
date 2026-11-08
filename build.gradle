@@ -27,7 +27,9 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
 	implementation 'org.springframework.boot:spring-boot-starter-jdbc'
 	implementation 'org.springframework.boot:spring-boot-starter-flyway'
+	implementation 'org.springframework.boot:spring-boot-starter-validation'
 	runtimeOnly 'com.h2database:h2'
+	annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
 	testImplementation 'org.springframework.boot:spring-boot-starter-actuator-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-jdbc-test'
@@ -40,6 +42,8 @@ dependencies {
 tasks.named('test') {
 	useJUnitPlatform()
 	jvmArgs "-javaagent:${configurations.mockitoAgent.asPath}"
+	// UTC+14: to fail tests that use the JVM's default zone instead of UTC
+	systemProperty 'user.timezone', 'Pacific/Kiritimati'
 }
 
 // only the executable Spring Boot jar is needed; the extra "-plain" jar would just be ambiguous in the Dockerfile
