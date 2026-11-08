@@ -44,7 +44,7 @@ class LoadFileRunnerIntegrationTest {
         runBatch("--input=" + input);
 
         // only the JSON lines: Boot sets up logging once per JVM, so if another test's context started first,
-        // startup logs can share stdout here. "No logs on stdout" is checked by a real run (D36).
+        // startup logs can share stdout here. "No logs on stdout" is checked by a real run.
         assertThat(captured.getOut().lines().filter(line -> line.startsWith("{")))
                 .containsExactly(ANSWER.strip());
     }
