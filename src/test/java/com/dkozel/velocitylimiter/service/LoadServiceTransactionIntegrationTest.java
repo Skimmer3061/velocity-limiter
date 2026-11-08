@@ -41,6 +41,9 @@ class LoadServiceTransactionIntegrationTest {
         jdbcClient.sql("DELETE FROM load_attempt WHERE customer_id = :customerId")
                 .param("customerId", CUSTOMER)
                 .update();
+        jdbcClient.sql("DELETE FROM customer WHERE id = :customerId")
+                .param("customerId", CUSTOMER)
+                .update();
     }
 
     @Test
