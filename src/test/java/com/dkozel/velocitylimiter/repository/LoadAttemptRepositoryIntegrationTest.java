@@ -1,8 +1,8 @@
 package com.dkozel.velocitylimiter.repository;
 
-import com.dkozel.velocitylimiter.domain.CustomerUsage;
 import com.dkozel.velocitylimiter.domain.LoadAttempt;
-import com.dkozel.velocitylimiter.domain.UsageWindows;
+import com.dkozel.velocitylimiter.domain.Period;
+import com.dkozel.velocitylimiter.domain.Usage;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -21,7 +21,7 @@ class LoadAttemptRepositoryIntegrationTest {
     private static final String CUSTOMER = "usage-customer";
 
     // Wednesday 2000-01-05: day [01-05, 01-06), week [Mon 01-03, Mon 01-10)
-    private static final UsageWindows WEDNESDAY = UsageWindows.containing(Instant.parse("2000-01-05T12:00:00Z"));
+    private static final Instant WEDNESDAY = Instant.parse("2000-01-05T12:00:00Z");
 
     @Autowired
     LoadAttemptRepository repository;
@@ -43,11 +43,13 @@ class LoadAttemptRepositoryIntegrationTest {
         insert(CUSTOMER, "7", "500.00", "2000-01-10T00:00:00Z", true);  // week end is outside
         insert("other-customer", "8", "700.00", "2000-01-05T10:00:00Z", true);
 
-        CustomerUsage usage = repository.usage(CUSTOMER, WEDNESDAY);
+        Usage day = repository.usage(CUSTOMER, Period.DAY.windowContaining(WEDNESDAY));
+        Usage week = repository.usage(CUSTOMER, Period.WEEK.windowContaining(WEDNESDAY));
 
-        assertThat(usage.dailyAmount()).isEqualByComparingTo("150.00");
-        assertThat(usage.weeklyAmount()).isEqualByComparingTo("1050.00");
-        assertThat(usage.dailyCount()).isEqualTo(2);
+        assertThat(day.amount()).isEqualByComparingTo("150.00");
+        assertThat(day.count()).isEqualTo(2);
+        assertThat(week.amount()).isEqualByComparingTo("1050.00");
+        assertThat(week.count()).isEqualTo(4);
     }
 
     @Test
@@ -62,11 +64,10 @@ class LoadAttemptRepositoryIntegrationTest {
 
     @Test
     void returnsZeroUsageForACustomerWithNoLoads() {
-        CustomerUsage usage = repository.usage("new-customer", WEDNESDAY);
+        Usage usage = repository.usage("new-customer", Period.WEEK.windowContaining(WEDNESDAY));
 
-        assertThat(usage.dailyAmount()).isEqualByComparingTo("0");
-        assertThat(usage.weeklyAmount()).isEqualByComparingTo("0");
-        assertThat(usage.dailyCount()).isZero();
+        assertThat(usage.amount()).isEqualByComparingTo("0");
+        assertThat(usage.count()).isZero();
     }
 
     @Test

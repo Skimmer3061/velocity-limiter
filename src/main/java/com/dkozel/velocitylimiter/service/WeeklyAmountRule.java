@@ -1,6 +1,7 @@
 package com.dkozel.velocitylimiter.service;
 
-import com.dkozel.velocitylimiter.domain.CustomerUsage;
+import com.dkozel.velocitylimiter.domain.Period;
+import com.dkozel.velocitylimiter.domain.Usage;
 import com.dkozel.velocitylimiter.domain.VelocityLimits;
 import com.dkozel.velocitylimiter.domain.Violation;
 import org.springframework.stereotype.Component;
@@ -12,8 +13,13 @@ import java.util.Optional;
 class WeeklyAmountRule implements VelocityRule {
 
     @Override
-    public Optional<Violation> check(BigDecimal amount, CustomerUsage usage, VelocityLimits limits) {
-        boolean overLimit = usage.weeklyAmount().add(amount).compareTo(limits.weeklyAmount()) > 0;
+    public Period period() {
+        return Period.WEEK;
+    }
+
+    @Override
+    public Optional<Violation> check(BigDecimal amount, Usage usage, VelocityLimits limits) {
+        boolean overLimit = usage.amount().add(amount).compareTo(limits.weeklyAmount()) > 0;
         return overLimit ? Optional.of(Violation.WEEKLY_AMOUNT) : Optional.empty();
     }
 }

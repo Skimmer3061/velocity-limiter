@@ -63,8 +63,8 @@ class LoadServiceConcurrencyIntegrationTest {
             // committed up front: the row already exists, so neither load creates it
             jdbcClient.sql("INSERT INTO customer (id) VALUES (:id)").param("id", CUSTOMER).update();
         }
-        // without the lock both loads would read $0 here
-        doAnswer(waitForTheOtherLoad()).when(repository).usage(any(), any());
+        // find() runs once per load, right before the usage is read: without the lock both loads would then read $0
+        doAnswer(waitForTheOtherLoad()).when(repository).find(any(), any());
 
         List<LoadOutcome> outcomes = processConcurrently(
                 new LoadCommand(CUSTOMER, "1", AMOUNT, WEDNESDAY),
@@ -108,7 +108,7 @@ class LoadServiceConcurrencyIntegrationTest {
             Object result = invocation.callRealMethod();
             Thread.sleep(1500);
             return result;
-        }).when(repository).usage(any(), any());
+        }).when(repository).find(any(), any());
         LoadCommand first = new LoadCommand(CUSTOMER, "1", new BigDecimal("100.00"), WEDNESDAY);
         LoadCommand second = new LoadCommand(CUSTOMER, "2", new BigDecimal("100.00"), WEDNESDAY);
 

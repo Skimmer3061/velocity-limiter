@@ -1,6 +1,7 @@
 package com.dkozel.velocitylimiter.service;
 
-import com.dkozel.velocitylimiter.domain.CustomerUsage;
+import com.dkozel.velocitylimiter.domain.Period;
+import com.dkozel.velocitylimiter.domain.Usage;
 import com.dkozel.velocitylimiter.domain.VelocityLimits;
 import com.dkozel.velocitylimiter.domain.Violation;
 import org.junit.jupiter.api.Test;
@@ -15,11 +16,14 @@ class DailyAmountRuleTest {
     private static final VelocityLimits LIMITS =
             new VelocityLimits(new BigDecimal("100.00"), new BigDecimal("300.00"), 2);
 
-    // the week differs from the day, so a rule that reads the wrong field fails
-    private static final CustomerUsage USED_80_TODAY =
-            new CustomerUsage(new BigDecimal("80.00"), new BigDecimal("250.00"), 1);
+    private static final Usage USED_80_TODAY = new Usage(new BigDecimal("80.00"), 1);
 
     private final DailyAmountRule rule = new DailyAmountRule();
+
+    @Test
+    void appliesToTheDay() {
+        assertThat(rule.period()).isEqualTo(Period.DAY);
+    }
 
     @Test
     void allowsALoadThatReachesTheLimitExactly() {

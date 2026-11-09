@@ -1,11 +1,11 @@
 package com.dkozel.velocitylimiter.service;
 
-import com.dkozel.velocitylimiter.domain.CustomerUsage;
 import com.dkozel.velocitylimiter.domain.LoadAttempt;
 import com.dkozel.velocitylimiter.domain.LoadCommand;
 import com.dkozel.velocitylimiter.domain.LoadDecision;
 import com.dkozel.velocitylimiter.domain.LoadOutcome;
-import com.dkozel.velocitylimiter.domain.UsageWindows;
+import com.dkozel.velocitylimiter.domain.Period;
+import com.dkozel.velocitylimiter.domain.Usage;
 import com.dkozel.velocitylimiter.domain.VelocityLimits;
 import com.dkozel.velocitylimiter.domain.Violation;
 import com.dkozel.velocitylimiter.repository.CustomerRepository;
@@ -15,8 +15,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -52,10 +54,14 @@ public class LoadService {
             log.debug("Repeated load: customerId={}, id={}, samePayload={}", command.customerId(), command.id(), samePayload);
             return samePayload ? new LoadOutcome.Replayed(decision) : new LoadOutcome.Conflicting(decision);
         }
-        CustomerUsage usage = loadAttemptRepository.usage(
-                command.customerId(), UsageWindows.containing(command.loadedAt()));
+        // one usage query per period the rules use (day and week today), each over that period's window
+        Map<Period, Usage> usage = new EnumMap<>(Period.class);
+        for (VelocityRule rule : rules) {
+            usage.computeIfAbsent(rule.period(), period -> loadAttemptRepository.usage(
+                    command.customerId(), period.windowContaining(command.loadedAt())));
+        }
         Set<Violation> violations = rules.stream()
-                .map(rule -> rule.check(command.amount(), usage, limits))
+                .map(rule -> rule.check(command.amount(), usage.get(rule.period()), limits))
                 .flatMap(Optional::stream)
                 .collect(Collectors.toCollection(() -> EnumSet.noneOf(Violation.class)));
         boolean accepted = violations.isEmpty();

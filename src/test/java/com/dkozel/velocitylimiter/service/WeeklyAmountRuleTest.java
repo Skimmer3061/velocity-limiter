@@ -1,6 +1,7 @@
 package com.dkozel.velocitylimiter.service;
 
-import com.dkozel.velocitylimiter.domain.CustomerUsage;
+import com.dkozel.velocitylimiter.domain.Period;
+import com.dkozel.velocitylimiter.domain.Usage;
 import com.dkozel.velocitylimiter.domain.VelocityLimits;
 import com.dkozel.velocitylimiter.domain.Violation;
 import org.junit.jupiter.api.Test;
@@ -15,11 +16,14 @@ class WeeklyAmountRuleTest {
     private static final VelocityLimits LIMITS =
             new VelocityLimits(new BigDecimal("100.00"), new BigDecimal("300.00"), 2);
 
-    // daily limit is no obstacle: only the week matters
-    private static final CustomerUsage USED_280_THIS_WEEK =
-            new CustomerUsage(BigDecimal.ZERO, new BigDecimal("280.00"), 0);
+    private static final Usage USED_280_THIS_WEEK = new Usage(new BigDecimal("280.00"), 3);
 
     private final WeeklyAmountRule rule = new WeeklyAmountRule();
+
+    @Test
+    void appliesToTheWeek() {
+        assertThat(rule.period()).isEqualTo(Period.WEEK);
+    }
 
     @Test
     void allowsALoadThatReachesTheLimitExactly() {

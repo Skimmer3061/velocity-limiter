@@ -1,8 +1,8 @@
 package com.dkozel.velocitylimiter.repository;
 
-import com.dkozel.velocitylimiter.domain.CustomerUsage;
 import com.dkozel.velocitylimiter.domain.LoadAttempt;
-import com.dkozel.velocitylimiter.domain.UsageWindows;
+import com.dkozel.velocitylimiter.domain.Period;
+import com.dkozel.velocitylimiter.domain.Usage;
 import com.dkozel.velocitylimiter.domain.Violation;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
@@ -31,24 +31,19 @@ public class LoadAttemptRepository {
                 .optional();
     }
 
-    public CustomerUsage usage(String customerId, UsageWindows windows) {
+    // accepted loads only: a declined attempt never counts toward a limit
+    public Usage usage(String customerId, Period.Window window) {
         return jdbcClient.sql("""
-                        SELECT COALESCE(SUM(CASE WHEN loaded_at >= :dayStart AND loaded_at < :dayEnd
-                                                 THEN amount END), 0)                             AS daily_amount,
-                               COALESCE(SUM(amount), 0)                                           AS weekly_amount,
-                               COUNT(CASE WHEN loaded_at >= :dayStart AND loaded_at < :dayEnd
-                                          THEN 1 END)                                             AS daily_count
+                        SELECT COALESCE(SUM(amount), 0), COUNT(*)
                         FROM load_attempt
                         WHERE customer_id = :customerId
                           AND accepted
-                          AND loaded_at >= :weekStart AND loaded_at < :weekEnd
+                          AND loaded_at >= :start AND loaded_at < :end
                         """)
                 .param("customerId", customerId)
-                .param("dayStart", windows.dayStart().atOffset(ZoneOffset.UTC))
-                .param("dayEnd", windows.dayEnd().atOffset(ZoneOffset.UTC))
-                .param("weekStart", windows.weekStart().atOffset(ZoneOffset.UTC))
-                .param("weekEnd", windows.weekEnd().atOffset(ZoneOffset.UTC))
-                .query(CustomerUsage.class)
+                .param("start", window.start().atOffset(ZoneOffset.UTC))
+                .param("end", window.end().atOffset(ZoneOffset.UTC))
+                .query((row, rowNumber) -> new Usage(row.getBigDecimal(1), row.getLong(2)))
                 .single();
     }
 
