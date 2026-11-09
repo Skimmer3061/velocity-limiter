@@ -55,7 +55,7 @@ class LoadStreamProcessorTest {
         // the task: a repeated id gets no answer, whether it is a retry or the same id with other data
         when(service.process(any()))
                 .thenReturn(new LoadOutcome.Replayed(new LoadDecision("c", "1", true)))
-                .thenReturn(new LoadOutcome.Conflicting(new LoadDecision("c", "1", true)))
+                .thenReturn(new LoadOutcome.Conflicting())
                 .thenReturn(new LoadOutcome.Decided(new LoadDecision("c", "2", true)));
         StringWriter output = new StringWriter();
 
@@ -73,6 +73,23 @@ class LoadStreamProcessorTest {
         verify(service).process(new LoadCommand("c", "1", new BigDecimal("2.00"), Instant.parse("2000-01-01T00:00:00Z")));
         verify(service).process(new LoadCommand("c", "2", new BigDecimal("1.00"), Instant.parse("2000-01-01T00:00:01Z")));
         verifyNoMoreInteractions(service);
+    }
+
+    @Test
+    void warnsAboutARepeatedIdWithOtherDataButNotAboutARetry(CapturedOutput log) throws IOException {
+        when(service.process(any()))
+                .thenReturn(new LoadOutcome.Replayed(new LoadDecision("c", "1", true)))
+                .thenReturn(new LoadOutcome.Conflicting());
+
+        processor.process(reader("""
+                {"id":"1","customer_id":"c","load_amount":"$1.00","time":"2000-01-01T00:00:00Z"}
+                {"id":"1","customer_id":"c","load_amount":"$2.00","time":"2000-01-01T00:00:00Z"}
+                """), new StringWriter());
+
+        assertThat(log.getAll())
+                .doesNotContain("Line 1:")
+                .contains("WARN")
+                .contains("Line 2: load id already used for this customer with a different amount or time, ignored");
     }
 
     @Test

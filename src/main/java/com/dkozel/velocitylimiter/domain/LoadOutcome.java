@@ -11,6 +11,6 @@ public sealed interface LoadOutcome {
     }
 
     // same customer and id, different amount or time
-    record Conflicting(LoadDecision original) implements LoadOutcome {
+    record Conflicting() implements LoadOutcome {
     }
 }
