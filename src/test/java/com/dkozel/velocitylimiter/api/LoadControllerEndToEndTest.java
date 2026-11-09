@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.web.servlet.assertj.MockMvcTester;
@@ -49,5 +50,20 @@ class LoadControllerEndToEndTest {
 
         assertThat(stored).isEqualTo(new LoadAttempt(
                 "e2e-customer", "1", new BigDecimal("3318.47"), Instant.parse("2000-01-01T00:00:00Z"), true));
+    }
+
+    @Test
+    void rejectsAnInvalidLoadWithoutStoringIt() {
+        var response = mvc.post().uri("/loads")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+            {"id":"1","customer_id":"e2e-invalid","load_amount":"$0.00","time":"2000-01-01T00:00:00Z"}
+            """);
+
+        assertThat(response).hasStatus(HttpStatus.BAD_REQUEST);
+        assertThat(jdbcClient.sql("SELECT COUNT(*) FROM load_attempt WHERE customer_id = :customerId")
+                .param("customerId", "e2e-invalid")
+                .query(Long.class)
+                .single()).isZero();
     }
 }
