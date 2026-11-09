@@ -45,6 +45,10 @@ public class LoadStreamProcessor {
         String line;
         while ((line = input.readLine()) != null) {
             lines++;
+            if (lines == 1 && line.startsWith("\uFEFF")) {
+                // a UTF-8 byte order mark that some Windows tools write; not part of the data
+                line = line.substring(1);
+            }
             if (line.isBlank()) {
                 continue;
             }

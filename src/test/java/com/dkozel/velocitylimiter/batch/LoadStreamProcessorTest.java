@@ -103,6 +103,37 @@ class LoadStreamProcessorTest {
     }
 
     @Test
+    void ignoresAByteOrderMarkAtTheStartOfTheFile() throws IOException {
+        when(service.process(any())).thenReturn(Optional.of(new LoadDecision("c", "1", true)));
+        StringWriter output = new StringWriter();
+
+        // some Windows tools start a UTF-8 file with U+FEFF; it is not part of the first load
+        BatchSummary summary = processor.process(reader("\uFEFF" + """
+                {"id":"1","customer_id":"c","load_amount":"$1.00","time":"2000-01-01T00:00:00Z"}
+                """), output);
+
+        assertThat(summary.rejected()).isZero();
+        assertThat(output).hasToString("""
+                {"id":"1","customer_id":"c","accepted":true}
+                """);
+    }
+
+    @Test
+    void rejectsAByteOrderMarkInsideTheFile(CapturedOutput log) throws IOException {
+        when(service.process(any())).thenReturn(Optional.of(new LoadDecision("c", "1", true)));
+
+        // only the very start of a file can carry a byte order mark; anywhere else the line is damaged
+        BatchSummary summary = processor.process(reader("""
+                {"id":"1","customer_id":"c","load_amount":"$1.00","time":"2000-01-01T00:00:00Z"}
+                """ + "\uFEFF" + """
+                {"id":"2","customer_id":"c","load_amount":"$1.00","time":"2000-01-01T00:00:01Z"}
+                """), new StringWriter());
+
+        assertThat(summary.rejected()).isEqualTo(1);
+        assertThat(log.getAll()).contains("Line 2 rejected: not valid JSON");
+    }
+
+    @Test
     void rejectsALineThatIsValidJsonButNotALoad(CapturedOutput log) throws IOException {
         BatchSummary summary = processor.process(reader("null\n"), new StringWriter());
 
