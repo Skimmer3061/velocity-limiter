@@ -67,9 +67,13 @@ class LoadFileRunner implements ApplicationRunner {
                 }
             }
         }
-        log.info("Batch finished: input={}, lines={}, accepted={}, declined={}, duplicates={}, rejected={}, durationMs={}",
-                inputPath, summary.lines(), summary.accepted(), summary.declined(), summary.duplicates(),
-                summary.rejected(), Duration.ofNanos(System.nanoTime() - started).toMillis());
+        log.info("Batch finished: input={}, output={}, lines={}, accepted={}, declined={}, duplicates={}, rejected={}, durationMs={}",
+                inputPath, outputPath == null ? "stdout" : outputPath, summary.lines(), summary.accepted(),
+                summary.declined(), summary.duplicates(), summary.rejected(),
+                Duration.ofNanos(System.nanoTime() - started).toMillis());
+        if (outputPath != null) {
+            log.info("Output written to {}", outputPath);
+        }
         if (summary.rejected() > 0) {
             throw new RejectedLinesException(summary.rejected());
         }
