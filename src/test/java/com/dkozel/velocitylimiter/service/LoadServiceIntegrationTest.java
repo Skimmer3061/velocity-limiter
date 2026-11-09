@@ -5,6 +5,8 @@ import com.dkozel.velocitylimiter.domain.LoadCommand;
 import com.dkozel.velocitylimiter.domain.LoadDecision;
 import com.dkozel.velocitylimiter.domain.LoadOutcome;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -29,6 +31,13 @@ class LoadServiceIntegrationTest {
 
     @Autowired
     JdbcClient jdbcClient;
+
+    @ParameterizedTest
+    @ValueSource(strings = {"0001-01-01T00:00:00Z", "9999-12-31T23:59:59.999999Z"})
+    void decidesALoadAtTheEdgesOfTheSupportedTimeRange(Instant time) {
+        // the usage windows around these reach year 0 and year 10000, which must still work as query parameters
+        assertThat(service.process(load("edge-" + time, "1", "1.00", time))).isEqualTo(decided("edge-" + time, "1", true));
+    }
 
     @Test
     void replaysTheOriginalDecisionForAnIdenticalRepeat() {
