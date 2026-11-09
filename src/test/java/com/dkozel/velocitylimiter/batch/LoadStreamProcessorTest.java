@@ -27,8 +27,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
@@ -116,6 +116,20 @@ class LoadStreamProcessorTest {
         assertThat(output).hasToString("""
                 {"id":"1","customer_id":"c","accepted":true}
                 """);
+        verify(service).process(new LoadCommand("c", "1", new BigDecimal("1.00"), Instant.parse("2000-01-01T00:00:00Z")));
+        verifyNoMoreInteractions(service);
+    }
+
+    @Test
+    void countsAFirstLineWithOnlyAByteOrderMarkAsBlank() throws IOException {
+        when(service.process(any())).thenReturn(Optional.of(new LoadDecision("c", "1", true)));
+
+        // the mark is removed before the blank check, so the line is not rejected as broken JSON
+        BatchSummary summary = processor.process(reader("\uFEFF\n" + """
+                {"id":"1","customer_id":"c","load_amount":"$1.00","time":"2000-01-01T00:00:00Z"}
+                """), new StringWriter());
+
+        assertThat(summary).isEqualTo(new BatchSummary(2, 1, 0, 0, 0));
     }
 
     @Test
@@ -131,6 +145,39 @@ class LoadStreamProcessorTest {
 
         assertThat(summary.rejected()).isEqualTo(1);
         assertThat(log.getAll()).contains("Line 2 rejected: not valid JSON");
+        verify(service).process(new LoadCommand("c", "1", new BigDecimal("1.00"), Instant.parse("2000-01-01T00:00:00Z")));
+        verifyNoMoreInteractions(service);
+    }
+
+    @Test
+    void rejectsALineThatWasNotValidUtf8(CapturedOutput log) throws IOException {
+        // the runner decodes bad bytes as U+FFFD; such a line is damaged, so it must not be decided
+        BatchSummary summary = processor.process(reader("""
+                {"id":"1","customer_id":"Jos\uFFFD","load_amount":"$1.00","time":"2000-01-01T00:00:00Z"}
+                """), new StringWriter());
+
+        assertThat(summary.rejected()).isEqualTo(1);
+        assertThat(log.getAll()).contains("Line 1 rejected: not valid UTF-8");
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void explainsAValueOfTheWrongType(CapturedOutput log) throws IOException {
+        processor.process(reader("""
+                {"id":"1","customer_id":"c","load_amount":"$1.00","time":"yesterday"}
+                """), new StringWriter());
+
+        assertThat(log.getAll()).contains("Line 1 rejected: time has a value of the wrong type or format");
+    }
+
+    @Test
+    void listsEveryViolationOfALine(CapturedOutput log) throws IOException {
+        processor.process(reader("""
+                {"id":"","customer_id":"c","load_amount":"$0.00","time":"2000-01-01T00:00:00Z"}
+                """), new StringWriter());
+
+        // sorted by field, so the same line always gives the same message
+        assertThat(log.getAll()).contains("Line 1 rejected: id must not be blank; load_amount must be a positive");
     }
 
     @Test
@@ -139,21 +186,23 @@ class LoadStreamProcessorTest {
 
         assertThat(summary).isEqualTo(new BatchSummary(1, 0, 0, 0, 1));
         assertThat(log.getAll()).contains("Line 1 rejected: not a load");
-        verifyNoMoreInteractions(service);
+        verifyNoInteractions(service);
     }
 
     @Test
     void logsOnlyTheStartOfALongBadLine(CapturedOutput log) throws IOException {
-        processor.process(reader("x".repeat(1100) + "\n"), new StringWriter());
+        processor.process(reader("x".repeat(1100) + "\n" + "y".repeat(1000) + "\n"), new StringWriter());
 
         assertThat(log.getAll()).contains("x".repeat(1000) + "…").doesNotContain("x".repeat(1001));
+        // exactly at the limit: logged whole, no ellipsis
+        assertThat(log.getAll()).contains("y".repeat(1000)).doesNotContain("y".repeat(1000) + "…");
     }
 
     @Test
     void allowsAsManyBadLinesAsTheLimit() throws IOException {
-        var strict = new LoadStreamProcessor(service, JSON, VALIDATOR, new BatchProperties(2L));
+        LoadStreamProcessor limitOfTwo = new LoadStreamProcessor(service, JSON, VALIDATOR, new BatchProperties(2L));
 
-        BatchSummary summary = strict.process(reader("""
+        BatchSummary summary = limitOfTwo.process(reader("""
                 not json
                 not json
                 """), new StringWriter());
@@ -164,10 +213,10 @@ class LoadStreamProcessorTest {
     @Test
     void stopsAtTheFirstBadLineOverTheLimit() {
         when(service.process(any())).thenReturn(Optional.of(new LoadDecision("c", "1", true)));
-        var strict = new LoadStreamProcessor(service, JSON, VALIDATOR, new BatchProperties(2L));
+        LoadStreamProcessor limitOfTwo = new LoadStreamProcessor(service, JSON, VALIDATOR, new BatchProperties(2L));
 
         // a wrong or corrupt file fails fast instead of logging a WARN for every line
-        assertThatThrownBy(() -> strict.process(reader("""
+        assertThatThrownBy(() -> limitOfTwo.process(reader("""
                 {"id":"1","customer_id":"c","load_amount":"$1.00","time":"2000-01-01T00:00:00Z"}
                 not json
                 not json
@@ -196,7 +245,8 @@ class LoadStreamProcessorTest {
                 .isInstanceOf(BatchProcessingException.class)
                 .hasMessage("Processing stopped at line 2")
                 .cause().isSameAs(databaseDown); // the original error, stack trace included, is kept
-        verify(service, times(2)).process(any());
+        verify(service).process(new LoadCommand("c", "1", new BigDecimal("1.00"), Instant.parse("2000-01-01T00:00:00Z")));
+        verify(service).process(new LoadCommand("c", "2", new BigDecimal("1.00"), Instant.parse("2000-01-01T00:00:01Z")));
         verifyNoMoreInteractions(service);
     }
 

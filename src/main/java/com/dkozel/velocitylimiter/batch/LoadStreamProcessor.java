@@ -41,7 +41,11 @@ public class LoadStreamProcessor {
     }
 
     public BatchSummary process(BufferedReader input, Writer output) throws IOException {
-        long lines = 0, accepted = 0, declined = 0, duplicates = 0, rejected = 0;
+        long lines = 0;
+        long accepted = 0;
+        long declined = 0;
+        long duplicates = 0;
+        long rejected = 0;
         String line;
         while ((line = input.readLine()) != null) {
             lines++;
@@ -84,6 +88,10 @@ public class LoadStreamProcessor {
     }
 
     private Optional<LoadRequest> read(String line, long lineNumber) {
+        // a byte that wasn't UTF-8 was decoded as U+FFFD: the line is damaged and must not be decided
+        if (line.indexOf('\uFFFD') >= 0) {
+            return reject(lineNumber, "not valid UTF-8", line);
+        }
         String reason;
         try {
             LoadRequest request = jsonMapper.readValue(line, LoadRequest.class);
@@ -102,7 +110,11 @@ public class LoadStreamProcessor {
         } catch (JacksonException unreadable) {
             reason = reasonFor(unreadable);
         }
-        log.warn("Line {} rejected: {}; line: {}", lineNumber, reason, trim(line));
+        return reject(lineNumber, reason, line);
+    }
+
+    private static Optional<LoadRequest> reject(long lineNumber, String reason, String line) {
+        log.warn("Line {} rejected: {}; line: {}", lineNumber, reason, truncate(line));
         return Optional.empty();
     }
 
@@ -118,7 +130,7 @@ public class LoadStreamProcessor {
         return "not valid JSON";
     }
 
-    private static String trim(String line) {
+    private static String truncate(String line) {
         return line.length() <= LOGGED_LINE_MAX_LENGTH ? line : line.substring(0, LOGGED_LINE_MAX_LENGTH) + "…";
     }
 }

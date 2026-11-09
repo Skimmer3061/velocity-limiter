@@ -8,8 +8,10 @@ import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -110,15 +112,44 @@ class LoadFileRunnerIntegrationTest {
     }
 
     @Test
-    void writesTheOtherAnswersThenFailsTheRunWhenALineWasRejected() throws Exception {
+    void refusesAnInputThatIsTheTemporaryFileOfTheOutput() throws Exception {
+        Path input = Files.writeString(dir.resolve("output.txt.tmp"), LOAD);
+
+        // writing the temporary file would empty the input while it is read, then rename it away
+        assertThatThrownBy(() -> runBatch("--input=" + input, "--output=" + dir.resolve("output.txt")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("--input must not be the temporary file of --output");
+        assertThat(Files.readString(input)).isEqualTo(LOAD);
+    }
+
+    @Test
+    void rejectsALineThatIsNotValidUtf8AndGoesOn(CapturedOutput captured) throws Exception {
+        // "José" saved as Windows-1252: the byte 0xE9 is not valid UTF-8
+        byte[] latin1Line = """
+                {"id":"2","customer_id":"Jos\u00e9","load_amount":"$1.00","time":"2000-01-01T00:00:01Z"}
+                """.getBytes(StandardCharsets.ISO_8859_1);
+        Path input = dir.resolve("input.txt");
+        Files.write(input, latin1Line);
+        Files.writeString(input, LOAD, StandardOpenOption.APPEND);
+        Path output = dir.resolve("output.txt");
+
+        assertThatThrownBy(() -> runBatch("--input=" + input, "--output=" + output))
+                .isInstanceOf(RejectedLinesException.class);
+
+        assertThat(captured.getAll()).contains("Line 1 rejected: not valid UTF-8");
+        assertThat(Files.readString(output)).isEqualTo(ANSWER);
+    }
+
+    @Test
+    void writesTheOtherAnswersThenFailsTheRunWhenALineWasRejected(CapturedOutput captured) throws Exception {
         Path input = Files.writeString(dir.resolve("input.txt"), "not json\n" + LOAD);
         Path output = dir.resolve("output.txt");
 
-        // the run reports failure so a scheduler notices, but only after every valid line was answered
         assertThatThrownBy(() -> runBatch("--input=" + input, "--output=" + output))
                 .isInstanceOf(RejectedLinesException.class)
                 .hasMessage("1 line(s) rejected, see the WARN log lines");
         assertThat(Files.readString(output)).isEqualTo(ANSWER);
+        assertThat(captured.getAll()).contains("lines=2, accepted=1, declined=0, duplicates=0, rejected=1");
     }
 
     @Test

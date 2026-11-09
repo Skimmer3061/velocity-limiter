@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
@@ -38,12 +39,17 @@ class LoadFileRunner implements ApplicationRunner {
         if (outputPath != null && Files.exists(outputPath) && Files.isSameFile(inputPath, outputPath)) {
             throw new IllegalArgumentException("--output must not be the same file as --input");
         }
+        // answers go to a sibling temp file, renamed over the output only when the run completes
+        Path temporary = outputPath == null ? null : outputPath.resolveSibling(outputPath.getFileName() + ".tmp");
+        if (temporary != null && Files.exists(temporary) && Files.isSameFile(inputPath, temporary)) {
+            throw new IllegalArgumentException("--input must not be the temporary file of --output");
+        }
         long started = System.nanoTime();
         BatchSummary summary;
-        try (BufferedReader input = Files.newBufferedReader(inputPath)) {
+        // bad bytes become U+FFFD instead of failing the read; the processor rejects such a line
+        try (BufferedReader input = new BufferedReader(
+                new InputStreamReader(Files.newInputStream(inputPath), StandardCharsets.UTF_8))) {
             if (outputPath != null) {
-                // answers go to a sibling temp file, renamed over the output only when the run completes
-                Path temporary = outputPath.resolveSibling(outputPath.getFileName() + ".tmp");
                 try {
                     try (Writer output = Files.newBufferedWriter(temporary)) {
                         summary = processor.process(input, output);

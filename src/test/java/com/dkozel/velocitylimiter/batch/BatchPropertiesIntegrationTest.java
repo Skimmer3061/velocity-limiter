@@ -23,13 +23,15 @@ class BatchPropertiesIntegrationTest {
 
     @Test
     void failsAtStartupWhenTheLimitIsMissing() {
-        runner.run(context -> assertThat(context).getFailure().rootCause().hasMessageContaining("maxRejectedLines"));
+        runner.run(context -> assertThat(context).getFailure().rootCause()
+                .hasMessageContaining("maxRejectedLines").hasMessageContaining("must not be null"));
     }
 
     @Test
     void failsAtStartupWhenTheLimitIsNegative() {
         runner.withPropertyValues("batch.max-rejected-lines=-1")
-                .run(context -> assertThat(context).getFailure().rootCause().hasMessageContaining("maxRejectedLines"));
+                .run(context -> assertThat(context).getFailure().rootCause()
+                        .hasMessageContaining("maxRejectedLines").hasMessageContaining("must be greater than or equal to 0"));
     }
 
     @EnableConfigurationProperties(BatchProperties.class)
