@@ -1,6 +1,7 @@
 package com.dkozel.velocitylimiter.service;
 
-import com.dkozel.velocitylimiter.domain.CustomerUsage;
+import com.dkozel.velocitylimiter.domain.Period;
+import com.dkozel.velocitylimiter.domain.Usage;
 import com.dkozel.velocitylimiter.domain.VelocityLimits;
 import com.dkozel.velocitylimiter.domain.Violation;
 import org.junit.jupiter.api.Test;
@@ -21,15 +22,20 @@ class DailyCountRuleTest {
     private final DailyCountRule rule = new DailyCountRule();
 
     @Test
+    void appliesToTheDay() {
+        assertThat(rule.period()).isEqualTo(Period.DAY);
+    }
+
+    @Test
     void allowsTheLastLoadTheLimitPermits() {
-        var oneLoadToday = new CustomerUsage(new BigDecimal("0.01"), new BigDecimal("0.01"), 1);
+        var oneLoadToday = new Usage(new BigDecimal("0.01"), 1);
 
         assertThat(rule.check(ONE_CENT, oneLoadToday, LIMITS)).isEmpty();
     }
 
     @Test
     void declinesOneLoadOverTheLimit() {
-        var twoLoadsToday = new CustomerUsage(new BigDecimal("0.02"), new BigDecimal("0.02"), 2);
+        var twoLoadsToday = new Usage(new BigDecimal("0.02"), 2);
 
         assertThat(rule.check(ONE_CENT, twoLoadsToday, LIMITS)).contains(Violation.DAILY_COUNT);
     }
