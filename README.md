@@ -82,7 +82,8 @@ startup, so there is nothing else to set up.
   0001 and 9999.
 - **A summary** is logged at the end:
   `Batch finished: input=…, output=…, lines=…, accepted=…, declined=…, duplicates=…, rejected=…, durationMs=…`
-  (`output=stdout` when the answers went to the console).
+  (`output=stdout` when the answers went to the console). A run that stops early logs the counts so far as
+  `Batch stopped: …` at WARN.
 - **If any line was rejected, the run fails** (non-zero exit code) after all valid lines have been answered and
   the output is in place, so a scheduler notices.
 - **Too many bad lines stop the run early:** over `batch.max-rejected-lines` (default 100; `0` stops at the first
@@ -132,6 +133,5 @@ Health check: `http://localhost:8080/actuator/health`. Stop the service with `do
 - **Standard output is not atomic:** answers stream out as they are decided; use `--output` for an all-or-nothing
   file.
 - **One very long line** is read whole into memory; a production reader would cap the line length.
-- **A stopped run** (skip limit or system failure) logs the reason and line, but no summary.
 - **`POST /loads` answers a repeated id with `204`**, so a client retrying after a timeout can't tell whether the
   first attempt was accepted.

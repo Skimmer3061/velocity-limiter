@@ -224,7 +224,10 @@ class LoadStreamProcessorTest {
                 {"id":"5","customer_id":"c","load_amount":"$1.00","time":"2000-01-01T00:00:04Z"}
                 """), new StringWriter()))
                 .isInstanceOf(RejectedLinesException.class)
-                .hasMessage("over 2 lines rejected (batch.max-rejected-lines), processing stopped at line 4");
+                .hasMessage("over 2 lines rejected (batch.max-rejected-lines), processing stopped at line 4")
+                // the counts up to the stop, so the runner can still log a summary
+                .isInstanceOfSatisfying(RejectedLinesException.class,
+                        stopped -> assertThat(stopped.summary()).isEqualTo(new BatchSummary(4, 1, 0, 0, 3)));
         verify(service).process(new LoadCommand("c", "1", new BigDecimal("1.00"), Instant.parse("2000-01-01T00:00:00Z")));
         verifyNoMoreInteractions(service);
     }
@@ -244,6 +247,8 @@ class LoadStreamProcessorTest {
                 """), new StringWriter()))
                 .isInstanceOf(BatchProcessingException.class)
                 .hasMessage("Processing stopped at line 2")
+                .isInstanceOfSatisfying(BatchProcessingException.class,
+                        stopped -> assertThat(stopped.summary()).isEqualTo(new BatchSummary(2, 1, 0, 0, 0)))
                 .cause().isSameAs(databaseDown); // the original error, stack trace included, is kept
         verify(service).process(new LoadCommand("c", "1", new BigDecimal("1.00"), Instant.parse("2000-01-01T00:00:00Z")));
         verify(service).process(new LoadCommand("c", "2", new BigDecimal("1.00"), Instant.parse("2000-01-01T00:00:01Z")));

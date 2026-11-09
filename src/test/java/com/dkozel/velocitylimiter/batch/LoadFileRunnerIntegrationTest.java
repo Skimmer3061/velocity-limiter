@@ -52,7 +52,7 @@ class LoadFileRunnerIntegrationTest {
     }
 
     @Test
-    void leavesNoOutputWhenTheRunStops() throws Exception {
+    void leavesNoOutputWhenTheRunStops(CapturedOutput captured) throws Exception {
         Path input = Files.writeString(dir.resolve("input.txt"), LOAD + "not json\n");
         Path output = dir.resolve("output.txt");
 
@@ -63,6 +63,11 @@ class LoadFileRunnerIntegrationTest {
         // no partial file that looks finished, and no temporary file left behind
         assertThat(output).doesNotExist();
         assertThat(dir).isDirectoryNotContaining("glob:**.tmp");
+        // a stopped run still says how far it got, and never claims an output was written
+        assertThat(captured.getAll())
+                .contains("Batch stopped: input=" + input + ", output=" + output
+                        + ", lines=2, accepted=1, declined=0, duplicates=0, rejected=1, durationMs=")
+                .doesNotContain("Output written to");
     }
 
     @Test
