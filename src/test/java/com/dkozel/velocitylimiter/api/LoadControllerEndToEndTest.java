@@ -66,4 +66,23 @@ class LoadControllerEndToEndTest {
                 .query(Long.class)
                 .single()).isZero();
     }
+
+    @Test
+    void listsEveryInvalidFieldByTheNameTheClientSent() {
+        var response = mvc.post().uri("/loads")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                {"id":"","customer_id":"e2e-invalid","load_amount":"$0.00","time":"2000-01-01T00:00:00Z"}
+                """);
+
+        assertThat(response).hasStatus(HttpStatus.BAD_REQUEST)
+                .hasContentType(MediaType.APPLICATION_PROBLEM_JSON)
+                .bodyJson().isLenientlyEqualTo("""
+                {"status": 400, "title": "Bad Request", "errors": [
+                  {"pointer": "#/id", "detail": "must not be blank"},
+                  {"pointer": "#/load_amount",
+                   "detail": "must be a positive dollar amount with exactly 2 decimals, like $123.45"}
+                ]}
+                """);
+    }
 }
