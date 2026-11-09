@@ -35,6 +35,42 @@ class LoadFileRunnerIntegrationTest {
         runBatch("--input=" + input, "--output=" + output);
 
         assertThat(Files.readString(output)).isEqualTo(ANSWER);
+        assertThat(dir).isDirectoryNotContaining("glob:**.tmp"); // the temporary file became the output
+    }
+
+    @Test
+    void replacesAnExistingOutputFile() throws Exception {
+        Path input = Files.writeString(dir.resolve("input.txt"), LOAD);
+        Path output = Files.writeString(dir.resolve("output.txt"), "answers of an earlier run\n");
+
+        runBatch("--input=" + input, "--output=" + output);
+
+        assertThat(Files.readString(output)).isEqualTo(ANSWER);
+    }
+
+    @Test
+    void leavesNoOutputWhenTheRunStops() throws Exception {
+        Path input = Files.writeString(dir.resolve("input.txt"), LOAD + "not json\n");
+        Path output = dir.resolve("output.txt");
+
+        // a limit of 0 stops the run at the bad line, after the first answer was already written
+        assertThatThrownBy(() -> runBatch("--input=" + input, "--output=" + output, "--batch.max-rejected-lines=0"))
+                .isInstanceOf(RejectedLinesException.class);
+
+        // no partial file that looks finished, and no temporary file left behind
+        assertThat(output).doesNotExist();
+        assertThat(dir).isDirectoryNotContaining("glob:**.tmp");
+    }
+
+    @Test
+    void keepsTheExistingOutputWhenTheRunStops() throws Exception {
+        Path input = Files.writeString(dir.resolve("input.txt"), LOAD + "not json\n");
+        Path output = Files.writeString(dir.resolve("output.txt"), "answers of an earlier run\n");
+
+        assertThatThrownBy(() -> runBatch("--input=" + input, "--output=" + output, "--batch.max-rejected-lines=0"))
+                .isInstanceOf(RejectedLinesException.class);
+
+        assertThat(Files.readString(output)).isEqualTo("answers of an earlier run\n");
     }
 
     @Test

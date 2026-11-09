@@ -15,6 +15,7 @@ import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.util.List;
 
@@ -41,8 +42,15 @@ class LoadFileRunner implements ApplicationRunner {
         BatchSummary summary;
         try (BufferedReader input = Files.newBufferedReader(inputPath)) {
             if (outputPath != null) {
-                try (Writer output = Files.newBufferedWriter(outputPath)) {
-                    summary = processor.process(input, output);
+                // answers go to a sibling temp file, renamed over the output only when the run completes
+                Path temporary = outputPath.resolveSibling(outputPath.getFileName() + ".tmp");
+                try {
+                    try (Writer output = Files.newBufferedWriter(temporary)) {
+                        summary = processor.process(input, output);
+                    }
+                    Files.move(temporary, outputPath, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+                } finally {
+                    Files.deleteIfExists(temporary);
                 }
             } else {
                 Writer stdout = new BufferedWriter(new OutputStreamWriter(System.out, StandardCharsets.UTF_8));
