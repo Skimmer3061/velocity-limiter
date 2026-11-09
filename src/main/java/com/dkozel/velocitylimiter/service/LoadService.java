@@ -4,6 +4,7 @@ import com.dkozel.velocitylimiter.domain.CustomerUsage;
 import com.dkozel.velocitylimiter.domain.LoadAttempt;
 import com.dkozel.velocitylimiter.domain.LoadCommand;
 import com.dkozel.velocitylimiter.domain.LoadDecision;
+import com.dkozel.velocitylimiter.domain.LoadOutcome;
 import com.dkozel.velocitylimiter.domain.UsageWindows;
 import com.dkozel.velocitylimiter.domain.VelocityLimits;
 import com.dkozel.velocitylimiter.domain.Violation;
@@ -39,12 +40,17 @@ public class LoadService {
     }
 
     @Transactional
-    public Optional<LoadDecision> process(LoadCommand command) {
+    public LoadOutcome process(LoadCommand command) {
         // one load per customer at a time; stays first, so the duplicate check, usage read and inserts all run under it
         customerRepository.lock(command.customerId());
-        if (loadAttemptRepository.exists(command.customerId(), command.id())) {
-            log.debug("Duplicate load ignored: customerId={}, id={}", command.customerId(), command.id());
-            return Optional.empty();
+        Optional<LoadAttempt> earlier = loadAttemptRepository.find(command.customerId(), command.id());
+        if (earlier.isPresent()) {
+            LoadAttempt original = earlier.get();
+            LoadDecision decision = new LoadDecision(original.customerId(), original.id(), original.accepted());
+            boolean samePayload = original.amount().compareTo(command.amount()) == 0
+                    && original.loadedAt().equals(command.loadedAt());
+            log.debug("Repeated load: customerId={}, id={}, samePayload={}", command.customerId(), command.id(), samePayload);
+            return samePayload ? new LoadOutcome.Replayed(decision) : new LoadOutcome.Conflicting(decision);
         }
         CustomerUsage usage = loadAttemptRepository.usage(
                 command.customerId(), UsageWindows.containing(command.loadedAt()));
@@ -58,6 +64,6 @@ public class LoadService {
         loadAttemptRepository.insertViolations(command.customerId(), command.id(), violations);
         log.debug("Load decided: customerId={}, id={}, accepted={}, violations={}",
                 command.customerId(), command.id(), accepted, violations);
-        return Optional.of(new LoadDecision(command.customerId(), command.id(), accepted));
+        return new LoadOutcome.Decided(new LoadDecision(command.customerId(), command.id(), accepted));
     }
 }

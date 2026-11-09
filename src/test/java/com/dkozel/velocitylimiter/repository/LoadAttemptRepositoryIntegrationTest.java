@@ -51,6 +51,16 @@ class LoadAttemptRepositoryIntegrationTest {
     }
 
     @Test
+    void findsAStoredAttemptByCustomerAndId() {
+        insert(CUSTOMER, "1", "50.00", "2000-01-05T10:00:00Z", false);
+
+        assertThat(repository.find(CUSTOMER, "1"))
+                .contains(new LoadAttempt(CUSTOMER, "1", new BigDecimal("50.00"), Instant.parse("2000-01-05T10:00:00Z"), false));
+        assertThat(repository.find(CUSTOMER, "2")).isEmpty();
+        assertThat(repository.find("other-customer", "1")).isEmpty();
+    }
+
+    @Test
     void returnsZeroUsageForACustomerWithNoLoads() {
         CustomerUsage usage = repository.usage("new-customer", WEDNESDAY);
 

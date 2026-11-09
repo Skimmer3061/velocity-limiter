@@ -4,6 +4,7 @@ import com.dkozel.velocitylimiter.api.JsonFieldNames;
 import com.dkozel.velocitylimiter.api.LoadRequest;
 import com.dkozel.velocitylimiter.api.LoadResponse;
 import com.dkozel.velocitylimiter.domain.LoadDecision;
+import com.dkozel.velocitylimiter.domain.LoadOutcome;
 import com.dkozel.velocitylimiter.service.LoadService;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
@@ -66,22 +67,23 @@ public class LoadStreamProcessor {
                 }
                 continue;
             }
-            Optional<LoadDecision> decision;
+            LoadOutcome outcome;
             try {
-                decision = loadService.process(request.get().toCommand());
+                outcome = loadService.process(request.get().toCommand());
             } catch (RuntimeException failure) {
                 throw new BatchProcessingException(lines, new BatchSummary(lines, accepted, declined, duplicates, rejected), failure);
             }
-            if (decision.isEmpty()) {
+            // the task: a repeated id gets no answer, whether it is a retry or carries other data
+            if (!(outcome instanceof LoadOutcome.Decided(LoadDecision decision))) {
                 duplicates++;
                 continue;
             }
-            if (decision.get().accepted()) {
+            if (decision.accepted()) {
                 accepted++;
             } else {
                 declined++;
             }
-            output.write(jsonMapper.writeValueAsString(LoadResponse.from(decision.get())));
+            output.write(jsonMapper.writeValueAsString(LoadResponse.from(decision)));
             output.write('\n');
         }
         output.flush();
