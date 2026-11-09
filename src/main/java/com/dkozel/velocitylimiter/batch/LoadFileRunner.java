@@ -70,13 +70,10 @@ class LoadFileRunner implements ApplicationRunner {
                 }
             }
         } catch (BatchStoppedException stopped) {
-        log.warn("Batch stopped: {}", describeBatch(inputPath, outputPath, stopped.summary(), started));
-        throw stopped;
-    }
-        log.info("Batch finished: input={}, output={}, lines={}, accepted={}, declined={}, duplicates={}, rejected={}, durationMs={}",
-                inputPath, outputPath == null ? "stdout" : outputPath, summary.lines(), summary.accepted(),
-                summary.declined(), summary.duplicates(), summary.rejected(),
-                Duration.ofNanos(System.nanoTime() - started).toMillis());
+            log.warn("Batch stopped: {}", describeBatch(inputPath, outputPath, stopped.summary(), started));
+            throw stopped;
+        }
+        log.info("Batch finished: {}", describeBatch(inputPath, outputPath, summary, started));
         if (outputPath != null) {
             log.info("Output written to {}", outputPath);
         }
