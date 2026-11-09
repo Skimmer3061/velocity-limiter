@@ -132,7 +132,10 @@ Health check: `http://localhost:8080/actuator/health`. Stop the service with `do
 
 ## Known limits
 
-- **In-memory database:** each run starts empty, so separate batch runs don't share history. File-based H2 is a
+- **In-memory database:** each run starts empty, so separate batch runs don't share history, and a restart of the
+  HTTP service resets every customer's limits; stored loads grow in memory until then. File-based H2 is a
   configuration change; PostgreSQL is the production choice.
+- **The client chooses `time`:** over HTTP a load counts toward the day and week it claims; the time is not checked
+  against the server's clock. Production would reject times outside now ± a small tolerance.
 - **Standard output is not atomic:** answers stream out as they are decided; use `--output` for an all-or-nothing
   file.

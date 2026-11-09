@@ -52,7 +52,7 @@ public class LoadService {
             boolean samePayload = original.amount().compareTo(command.amount()) == 0
                     && original.loadedAt().equals(command.loadedAt());
             log.debug("Repeated load: customerId={}, id={}, samePayload={}", command.customerId(), command.id(), samePayload);
-            return samePayload ? new LoadOutcome.Replayed(decision) : new LoadOutcome.Conflicting(decision);
+            return samePayload ? new LoadOutcome.Replayed(decision) : new LoadOutcome.Conflicting();
         }
         // one usage query per period the rules use (day and week today), each over that period's window
         Map<Period, Usage> usage = new EnumMap<>(Period.class);

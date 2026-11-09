@@ -31,7 +31,7 @@ class LoadController {
             case LoadOutcome.Replayed(LoadDecision original) -> ResponseEntity.ok()
                     .header("Idempotent-Replayed", "true")
                     .body(LoadResponse.from(original));
-            case LoadOutcome.Conflicting conflicting -> throw new ErrorResponseException(HttpStatus.CONFLICT,
+            case LoadOutcome.Conflicting _ -> throw new ErrorResponseException(HttpStatus.CONFLICT,
                     ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
                             "This load id was already used for this customer with a different amount or time."), null);
         };

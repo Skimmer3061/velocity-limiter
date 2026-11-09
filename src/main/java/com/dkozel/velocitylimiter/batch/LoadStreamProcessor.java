@@ -79,6 +79,9 @@ public class LoadStreamProcessor {
             } catch (RuntimeException failure) {
                 throw new BatchProcessingException(lines, new BatchSummary(lines, accepted, declined, duplicates, rejected), failure);
             }
+            if (outcome instanceof LoadOutcome.Conflicting) {
+                log.warn("Line {}: load id already used for this customer with a different amount or time, ignored", lines);
+            }
             // the task: a repeated id gets no answer, whether it is a retry or carries other data
             if (!(outcome instanceof LoadOutcome.Decided(LoadDecision decision))) {
                 duplicates++;

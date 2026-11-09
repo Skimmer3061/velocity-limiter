@@ -56,7 +56,7 @@ class LoadServiceIntegrationTest {
         service.process(load("conflict-customer", "1", "100.00", TIME));
 
         assertThat(service.process(load("conflict-customer", "1", "100.01", TIME)))
-                .isEqualTo(new LoadOutcome.Conflicting(new LoadDecision("conflict-customer", "1", true)));
+                .isEqualTo(new LoadOutcome.Conflicting());
     }
 
     @Test
@@ -64,7 +64,7 @@ class LoadServiceIntegrationTest {
         service.process(load("dup-customer", "1", TIME));
 
         assertThat(service.process(load("dup-customer", "1", TIME.plusSeconds(1))))
-                .isEqualTo(new LoadOutcome.Conflicting(new LoadDecision("dup-customer", "1", true)));
+                .isEqualTo(new LoadOutcome.Conflicting());
         // the first attempt stays as it was: one row, with the first load's time
         assertThat(jdbcClient.sql("SELECT * FROM load_attempt WHERE customer_id = 'dup-customer'")
                 .query(LoadAttempt.class)
