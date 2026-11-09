@@ -48,7 +48,7 @@ class LoadStreamProcessorTest {
     private final LoadService service = mock(LoadService.class);
 
     private final LoadStreamProcessor processor =
-            new LoadStreamProcessor(service, JSON, VALIDATOR, new BatchProperties(100L));
+            new LoadStreamProcessor(service, JSON, VALIDATOR, new BatchProperties(100L, 10_000));
 
     @Test
     void writesNothingForARepeatedIdAndContinues() throws IOException {
@@ -203,8 +203,23 @@ class LoadStreamProcessorTest {
     }
 
     @Test
+    void rejectsALineOverTheLengthLimitAndDecidesTheNext(CapturedOutput log) throws IOException {
+        when(service.process(any())).thenReturn(new LoadOutcome.Decided(new LoadDecision("c", "1", true)));
+        LoadStreamProcessor shortLines = new LoadStreamProcessor(service, JSON, VALIDATOR, new BatchProperties(100L, 100));
+
+        BatchSummary summary = shortLines.process(reader("x".repeat(101) + "\n" + """
+                {"id":"1","customer_id":"c","load_amount":"$1.00","time":"2000-01-01T00:00:00Z"}
+                """), new StringWriter());
+
+        assertThat(summary).isEqualTo(new BatchSummary(2, 1, 0, 0, 1));
+        assertThat(log.getAll()).contains("Line 1 rejected: longer than 100 characters (batch.max-line-length)");
+        verify(service).process(new LoadCommand("c", "1", new BigDecimal("1.00"), Instant.parse("2000-01-01T00:00:00Z")));
+        verifyNoMoreInteractions(service);
+    }
+
+    @Test
     void allowsAsManyBadLinesAsTheLimit() throws IOException {
-        LoadStreamProcessor limitOfTwo = new LoadStreamProcessor(service, JSON, VALIDATOR, new BatchProperties(2L));
+        LoadStreamProcessor limitOfTwo = new LoadStreamProcessor(service, JSON, VALIDATOR, new BatchProperties(2L, 10_000));
 
         BatchSummary summary = limitOfTwo.process(reader("""
                 not json
@@ -217,7 +232,7 @@ class LoadStreamProcessorTest {
     @Test
     void stopsAtTheFirstBadLineOverTheLimit() {
         when(service.process(any())).thenReturn(new LoadOutcome.Decided(new LoadDecision("c", "1", true)));
-        LoadStreamProcessor limitOfTwo = new LoadStreamProcessor(service, JSON, VALIDATOR, new BatchProperties(2L));
+        LoadStreamProcessor limitOfTwo = new LoadStreamProcessor(service, JSON, VALIDATOR, new BatchProperties(2L, 10_000));
 
         // a wrong or corrupt file fails fast instead of logging a WARN for every line
         assertThatThrownBy(() -> limitOfTwo.process(reader("""

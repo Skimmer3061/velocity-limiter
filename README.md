@@ -93,6 +93,8 @@ startup, so there is nothing else to set up.
 - **`--output` is written atomically:** the answers go to `<output>.tmp` and are renamed over `<output>` only when
   the run completes. A failed or stopped run leaves an existing output file untouched and no partial file behind.
   A successful run replaces an existing output file.
+- **A line longer than `batch.max-line-length`** (default 10,000 characters) is rejected like any bad line,
+  without being kept in memory, so a wrong file (binary, one huge line) can't exhaust memory.
 - A UTF-8 byte order mark at the start of the file is ignored.
 
 To see why each load was accepted or declined, add `--logging.level.com.dkozel.velocitylimiter.service=DEBUG`
@@ -134,4 +136,3 @@ Health check: `http://localhost:8080/actuator/health`. Stop the service with `do
   configuration change; PostgreSQL is the production choice.
 - **Standard output is not atomic:** answers stream out as they are decided; use `--output` for an all-or-nothing
   file.
-- **One very long line** is read whole into memory; a production reader would cap the line length.
