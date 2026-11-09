@@ -72,7 +72,7 @@ class LoadControllerEndToEndTest {
         var response = mvc.post().uri("/loads")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
-                {"id":"","customer_id":"e2e-invalid","load_amount":"$0.00","time":"2000-01-01T00:00:00Z"}
+                {"id":"","customer_id":"e2e-invalid","load_amount":"$0.00","time":"+10000-01-01T00:00:00Z"}
                 """);
 
         assertThat(response).hasStatus(HttpStatus.BAD_REQUEST)
@@ -81,7 +81,8 @@ class LoadControllerEndToEndTest {
                 {"status": 400, "title": "Bad Request", "errors": [
                   {"pointer": "#/id", "detail": "must not be blank"},
                   {"pointer": "#/load_amount",
-                   "detail": "must be a positive dollar amount with exactly 2 decimals, like $123.45"}
+                   "detail": "must be a positive dollar amount with exactly 2 decimals, like $123.45"},
+                  {"pointer": "#/time", "detail": "must be between 0001-01-01 and 9999-12-31 UTC"}
                 ]}
                 """);
     }

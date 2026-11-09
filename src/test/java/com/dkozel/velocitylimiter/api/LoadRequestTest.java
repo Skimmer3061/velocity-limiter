@@ -25,7 +25,7 @@ class LoadRequestTest {
 
     private static final LoadRequest VALID = new LoadRequest("15887", "528", "$3318.47", TIME);
 
-    // the Java property names of the violations, e.g. "customerId" or "timeInSupportedRange"
+    // the Java property names of the violations, e.g. "customerId"
     private static Set<String> invalidFields(LoadRequest request) {
         return VALIDATOR.validate(request).stream()
                 .map(violation -> violation.getPropertyPath().toString())
@@ -102,7 +102,7 @@ class LoadRequestTest {
             "-999999999-01-01T00:00:00Z", "+999999999-12-31T23:59:59Z"    // the extremes Instant can parse
     })
     void rejectsATimeOutsideTheSupportedRange(Instant time) {
-        assertThat(invalidFields(new LoadRequest("1", "c", "$1.00", time))).containsExactly("timeInSupportedRange");
+        assertThat(invalidFields(new LoadRequest("1", "c", "$1.00", time))).containsExactly("time");
     }
 
     @Test
