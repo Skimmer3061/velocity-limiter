@@ -86,4 +86,45 @@ class LoadControllerEndToEndTest {
                 ]}
                 """);
     }
+
+    @Test
+    void reportsAnUnknownFieldByItsName() {
+        var response = mvc.post().uri("/loads")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+            {"id":"1","customer_id":"e2e-invalid","loadamount":"$1.00","time":"2000-01-01T00:00:00Z"}
+            """);
+
+        assertThat(response).hasStatus(HttpStatus.BAD_REQUEST)
+                .bodyJson().isLenientlyEqualTo("""
+            {"errors": [{"pointer": "#/loadamount", "detail": "unknown field"}]}
+            """);
+    }
+
+    @Test
+    void reportsAValueThatCannotBeRead() {
+        var response = mvc.post().uri("/loads")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+            {"id":"1","customer_id":"e2e-invalid","load_amount":"$1.00","time":"yesterday"}
+            """);
+
+        assertThat(response).hasStatus(HttpStatus.BAD_REQUEST)
+                .bodyJson().isLenientlyEqualTo("""
+            {"errors": [{"pointer": "#/time", "detail": "has a value of the wrong type or format"}]}
+            """);
+    }
+
+    @Test
+    void answersBrokenJsonWithoutInternalDetails() {
+        var response = mvc.post().uri("/loads")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"id\":");
+
+        assertThat(response).hasStatus(HttpStatus.BAD_REQUEST)
+                .hasContentType(MediaType.APPLICATION_PROBLEM_JSON)
+                .bodyJson().isLenientlyEqualTo("""
+            {"detail": "Failed to read request"}
+            """);
+    }
 }
