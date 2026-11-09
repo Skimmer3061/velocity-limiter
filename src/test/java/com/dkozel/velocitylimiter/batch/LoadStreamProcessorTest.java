@@ -3,6 +3,11 @@ package com.dkozel.velocitylimiter.batch;
 import com.dkozel.velocitylimiter.domain.LoadCommand;
 import com.dkozel.velocitylimiter.domain.LoadDecision;
 import com.dkozel.velocitylimiter.service.LoadService;
+import jakarta.validation.ConstraintViolationException;
+import jakarta.validation.Validation;
+import jakarta.validation.Validator;
+import jakarta.validation.ValidatorFactory;
+import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -15,13 +20,16 @@ import java.time.Instant;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 class LoadStreamProcessorTest {
+
+    @AutoClose
+    private static final ValidatorFactory VALIDATOR_FACTORY = Validation.buildDefaultValidatorFactory();
+
+    private static final Validator VALIDATOR = VALIDATOR_FACTORY.getValidator();
 
     @Test
     void writesNothingForADuplicateAndContinues() throws IOException {
@@ -29,7 +37,7 @@ class LoadStreamProcessorTest {
         when(service.process(any()))
                 .thenReturn(Optional.empty())
                 .thenReturn(Optional.of(new LoadDecision("c", "2", true)));
-        var processor = new LoadStreamProcessor(service, JsonMapper.builder().build());
+        var processor = new LoadStreamProcessor(service, JsonMapper.builder().build(), VALIDATOR);
         StringWriter output = new StringWriter();
 
         processor.process(new BufferedReader(new StringReader("""
@@ -43,5 +51,19 @@ class LoadStreamProcessorTest {
         verify(service).process(new LoadCommand("c", "1", new BigDecimal("1.00"), Instant.parse("2000-01-01T00:00:00Z")));
         verify(service).process(new LoadCommand("c", "2", new BigDecimal("1.00"), Instant.parse("2000-01-01T00:00:01Z")));
         verifyNoMoreInteractions(service);
+    }
+
+    @Test
+    void stopsAtAnInvalidLineWithoutCallingTheService() {
+        LoadService service = mock(LoadService.class);
+        var processor = new LoadStreamProcessor(service, JsonMapper.builder().build(), VALIDATOR);
+        var input = new BufferedReader(new StringReader("""
+            {"id":"1","customer_id":"c","load_amount":"$0.00","time":"2000-01-01T00:00:00Z"}
+            """));
+
+        assertThatThrownBy(() -> processor.process(input, new StringWriter()))
+                .isInstanceOf(ConstraintViolationException.class)
+                .hasMessageContaining("loadAmount");
+        verifyNoInteractions(service);
     }
 }
