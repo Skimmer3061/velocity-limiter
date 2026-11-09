@@ -1,7 +1,14 @@
 ## Quick start with Docker (any operating system)
 
-The only requirement is Docker (Docker Desktop on macOS and Windows) running. Run the commands from the project
-folder; where they differ, macOS/Linux and Windows PowerShell versions are shown.
+The only requirement is Docker (Docker Desktop on macOS and Windows) running, plus Git to get the code. Where
+commands differ, macOS/Linux and Windows PowerShell versions are shown.
+
+**0. Get the code** and run every following command from the project folder:
+
+```bash
+git clone https://github.com/Skimmer3061/velocity-limiter.git
+cd velocity-limiter
+```
 
 **1. Build the images** (compiles the app inside Docker; the first build takes a few minutes; run it again after
 changing the code):
@@ -16,8 +23,9 @@ docker compose --profile batch build
 docker compose run --rm batch --input=input.txt --output=output.txt
 ```
 
-The answers are written to `output.txt`, and the last log line says where:
-`Batch finished: input=input.txt, output=output.txt, lines=…, accepted=…, declined=…, duplicates=…, rejected=…`.
+The answers are written to `output.txt`. The run ends with a summary and the location:
+`Batch finished: input=input.txt, output=output.txt, lines=…, accepted=…, declined=…, duplicates=…, rejected=…`
+and `Output written to output.txt`.
 Leave out `--output` to print the answers in the console instead. The command is the same on macOS, Linux and
 Windows. On Linux, if writing the output fails with a permission error, add `--user "$(id -u):$(id -g)"` after
 `--rm`.

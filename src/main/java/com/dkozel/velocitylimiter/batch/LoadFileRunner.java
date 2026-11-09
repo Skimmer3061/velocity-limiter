@@ -35,6 +35,9 @@ class LoadFileRunner implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments args) throws IOException {
         Path inputPath = pathOption(args, "input");
+        if (!Files.isRegularFile(inputPath)) {
+            throw new IllegalArgumentException("--input file not found: " + inputPath);
+        }
         Path outputPath = args.containsOption("output") ? pathOption(args, "output") : null;
         if (outputPath != null && Files.exists(outputPath) && Files.isSameFile(inputPath, outputPath)) {
             throw new IllegalArgumentException("--output must not be the same file as --input");
