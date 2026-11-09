@@ -40,3 +40,8 @@ out/
 
 ### Local Java switcher (jenv); the Java version is pinned by the Gradle toolchain ###
 .java-version
+
+### Batch runs in the project root (README examples) ###
+/input.txt
+/output.txt
+/*.tmp

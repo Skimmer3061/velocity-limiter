@@ -4,3 +4,12 @@ services:
     ports:
       # 127.0.0.1 = reachable only from this machine, not from other devices on the network
       - "127.0.0.1:8080:8080"
+
+  # the file runner on demand: docker compose run --rm batch --input=<file> [--output=<file>]
+  batch:
+    build: .
+    profiles: [batch]  # not started by `docker compose up`
+    volumes:
+      - .:/data        # the project folder, so --input and --output paths are relative to it
+    working_dir: /data
+    entrypoint: ["java", "-jar", "/app/app.jar", "--spring.profiles.active=batch"]
