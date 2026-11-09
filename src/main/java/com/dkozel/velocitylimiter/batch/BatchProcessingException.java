@@ -1,8 +1,8 @@
 package com.dkozel.velocitylimiter.batch;
 
-class BatchProcessingException extends RuntimeException {
+class BatchProcessingException extends BatchStoppedException {
 
-    BatchProcessingException(long lineNumber, RuntimeException cause) {
-        super("Processing stopped at line " + lineNumber, cause);
+    BatchProcessingException(long lineNumber, BatchSummary summary, RuntimeException cause) {
+        super("Processing stopped at line " + lineNumber, summary, cause);
     }
 }

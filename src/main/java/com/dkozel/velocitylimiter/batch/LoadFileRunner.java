@@ -69,7 +69,10 @@ class LoadFileRunner implements ApplicationRunner {
                     stdout.flush(); // flush, don't close: System.out isn't ours to close
                 }
             }
-        }
+        } catch (BatchStoppedException stopped) {
+        log.warn("Batch stopped: {}", describeBatch(inputPath, outputPath, stopped.summary(), started));
+        throw stopped;
+    }
         log.info("Batch finished: input={}, output={}, lines={}, accepted={}, declined={}, duplicates={}, rejected={}, durationMs={}",
                 inputPath, outputPath == null ? "stdout" : outputPath, summary.lines(), summary.accepted(),
                 summary.declined(), summary.duplicates(), summary.rejected(),
@@ -78,7 +81,7 @@ class LoadFileRunner implements ApplicationRunner {
             log.info("Output written to {}", outputPath);
         }
         if (summary.rejected() > 0) {
-            throw new RejectedLinesException(summary.rejected());
+            throw new RejectedLinesException(summary);
         }
     }
 
@@ -88,5 +91,12 @@ class LoadFileRunner implements ApplicationRunner {
             throw new IllegalArgumentException("--" + name + " needs exactly one file path");
         }
         return Path.of(values.getFirst());
+    }
+
+    private static String describeBatch(Path inputPath, Path outputPath, BatchSummary summary, long started) {
+        return "input=%s, output=%s, lines=%d, accepted=%d, declined=%d, duplicates=%d, rejected=%d, durationMs=%d".formatted(
+                inputPath, outputPath == null ? "stdout" : outputPath, summary.lines(), summary.accepted(),
+                summary.declined(), summary.duplicates(), summary.rejected(),
+                Duration.ofNanos(System.nanoTime() - started).toMillis());
     }
 }

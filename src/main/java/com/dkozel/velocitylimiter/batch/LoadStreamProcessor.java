@@ -61,7 +61,8 @@ public class LoadStreamProcessor {
                 rejected++;
                 if (rejected > maxRejectedLines) {
                     throw new RejectedLinesException("over " + maxRejectedLines
-                            + " lines rejected (batch.max-rejected-lines), processing stopped at line " + lines);
+                            + " lines rejected (batch.max-rejected-lines), processing stopped at line " + lines,
+                            new BatchSummary(lines, accepted, declined, duplicates, rejected));
                 }
                 continue;
             }
@@ -69,7 +70,7 @@ public class LoadStreamProcessor {
             try {
                 decision = loadService.process(request.get().toCommand());
             } catch (RuntimeException failure) {
-                throw new BatchProcessingException(lines, failure);
+                throw new BatchProcessingException(lines, new BatchSummary(lines, accepted, declined, duplicates, rejected), failure);
             }
             if (decision.isEmpty()) {
                 duplicates++;
