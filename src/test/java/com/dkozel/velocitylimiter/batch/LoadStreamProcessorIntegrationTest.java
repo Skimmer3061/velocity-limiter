@@ -28,11 +28,12 @@ class LoadStreamProcessorIntegrationTest {
                 """;
         StringWriter output = new StringWriter();
 
-        processor.process(new BufferedReader(new StringReader(input)), output);
+        BatchSummary summary = processor.process(new BufferedReader(new StringReader(input)), output);
 
         assertThat(output).hasToString("""
                 {"id":"1","customer_id":"stream-customer","accepted":true}
                 {"id":"2","customer_id":"stream-customer","accepted":true}
                 """);
+        assertThat(summary).isEqualTo(new BatchSummary(3, 2, 0, 0, 0)); // the blank line is read, not decided
     }
 }

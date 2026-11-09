@@ -74,11 +74,11 @@ class LoadFileRunnerIntegrationTest {
     }
 
     @Test
-    void keepsTheAnswersDecidedBeforeAFailure() throws Exception {
-        Path input = Files.writeString(dir.resolve("input.txt"), LOAD + "not json\n");
+    void skipsABadLineAndWritesTheOtherAnswers() throws Exception {
+        Path input = Files.writeString(dir.resolve("input.txt"), "not json\n" + LOAD);
         Path output = dir.resolve("output.txt");
 
-        assertThatThrownBy(() -> runBatch("--input=" + input, "--output=" + output));
+        runBatch("--input=" + input, "--output=" + output);
 
         assertThat(Files.readString(output)).isEqualTo(ANSWER);
     }

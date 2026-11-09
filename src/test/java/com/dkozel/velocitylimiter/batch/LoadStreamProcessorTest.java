@@ -3,12 +3,16 @@ package com.dkozel.velocitylimiter.batch;
 import com.dkozel.velocitylimiter.domain.LoadCommand;
 import com.dkozel.velocitylimiter.domain.LoadDecision;
 import com.dkozel.velocitylimiter.service.LoadService;
-import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
 import jakarta.validation.ValidatorFactory;
 import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
+import org.springframework.dao.DataAccessResourceFailureException;
+import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.io.BufferedReader;
@@ -22,8 +26,12 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
 
+@ExtendWith(OutputCaptureExtension.class)
 class LoadStreamProcessorTest {
 
     @AutoClose
@@ -31,39 +39,98 @@ class LoadStreamProcessorTest {
 
     private static final Validator VALIDATOR = VALIDATOR_FACTORY.getValidator();
 
+    // as configured for the app (spring.jackson.deserialization.fail-on-unknown-properties)
+    private static final JsonMapper JSON = JsonMapper.builder()
+            .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+            .build();
+
+    private final LoadService service = mock(LoadService.class);
+
+    private final LoadStreamProcessor processor = new LoadStreamProcessor(service, JSON, VALIDATOR);
+
     @Test
     void writesNothingForADuplicateAndContinues() throws IOException {
-        LoadService service = mock(LoadService.class);
         when(service.process(any()))
                 .thenReturn(Optional.empty())
                 .thenReturn(Optional.of(new LoadDecision("c", "2", true)));
-        var processor = new LoadStreamProcessor(service, JsonMapper.builder().build(), VALIDATOR);
         StringWriter output = new StringWriter();
 
-        processor.process(new BufferedReader(new StringReader("""
+        BatchSummary summary = processor.process(reader("""
                 {"id":"1","customer_id":"c","load_amount":"$1.00","time":"2000-01-01T00:00:00Z"}
                 {"id":"2","customer_id":"c","load_amount":"$1.00","time":"2000-01-01T00:00:01Z"}
-                """)), output);
+                """), output);
 
         assertThat(output).hasToString("""
                 {"id":"2","customer_id":"c","accepted":true}
                 """);
+        assertThat(summary).isEqualTo(new BatchSummary(2, 1, 0, 1, 0));
         verify(service).process(new LoadCommand("c", "1", new BigDecimal("1.00"), Instant.parse("2000-01-01T00:00:00Z")));
         verify(service).process(new LoadCommand("c", "2", new BigDecimal("1.00"), Instant.parse("2000-01-01T00:00:01Z")));
         verifyNoMoreInteractions(service);
     }
 
     @Test
-    void stopsAtAnInvalidLineWithoutCallingTheService() {
-        LoadService service = mock(LoadService.class);
-        var processor = new LoadStreamProcessor(service, JsonMapper.builder().build(), VALIDATOR);
-        var input = new BufferedReader(new StringReader("""
-            {"id":"1","customer_id":"c","load_amount":"$0.00","time":"2000-01-01T00:00:00Z"}
-            """));
+    void skipsEachBadLineWithAWarningAndDecidesTheRest(CapturedOutput log) throws IOException {
+        when(service.process(any()))
+                .thenReturn(Optional.of(new LoadDecision("c", "1", true)))
+                .thenReturn(Optional.of(new LoadDecision("c", "5", false)));
+        StringWriter output = new StringWriter();
 
-        assertThatThrownBy(() -> processor.process(input, new StringWriter()))
-                .isInstanceOf(ConstraintViolationException.class)
-                .hasMessageContaining("loadAmount");
-        verifyNoInteractions(service);
+        BatchSummary summary = processor.process(reader("""
+                {"id":"1","customer_id":"c","load_amount":"$1.00","time":"2000-01-01T00:00:00Z"}
+                {"id":"2","customer_id":"c","load_amount":"$0.00","time":"2000-01-01T00:00:01Z"}
+                not json
+                {"id":"4","customer_id":"c","loadamount":"$1.00","time":"2000-01-01T00:00:03Z"}
+                {"id":"5","customer_id":"c","load_amount":"$1.00","time":"2000-01-01T00:00:04Z"}
+                """), output);
+
+        // a bad line gets no answer line; the lines around it are decided as usual
+        assertThat(output).hasToString("""
+                {"id":"1","customer_id":"c","accepted":true}
+                {"id":"5","customer_id":"c","accepted":false}
+                """);
+        assertThat(summary).isEqualTo(new BatchSummary(5, 1, 1, 0, 3));
+        verify(service).process(new LoadCommand("c", "1", new BigDecimal("1.00"), Instant.parse("2000-01-01T00:00:00Z")));
+        verify(service).process(new LoadCommand("c", "5", new BigDecimal("1.00"), Instant.parse("2000-01-01T00:00:04Z")));
+        verifyNoMoreInteractions(service);
+        // the reason names the field as written in the file
+        assertThat(log.getAll())
+                .contains("Line 2 rejected: load_amount must be a positive dollar amount with exactly 2 decimals")
+                .contains("Line 3 rejected: not valid JSON")
+                .contains("Line 4 rejected: unknown field loadamount");
+    }
+
+    @Test
+    void rejectsALineThatIsValidJsonButNotALoad(CapturedOutput log) throws IOException {
+        BatchSummary summary = processor.process(reader("null\n"), new StringWriter());
+
+        assertThat(summary).isEqualTo(new BatchSummary(1, 0, 0, 0, 1));
+        assertThat(log.getAll()).contains("Line 1 rejected: not a load");
+        verifyNoMoreInteractions(service);
+    }
+
+    @Test
+    void logsOnlyTheStartOfALongBadLine(CapturedOutput log) throws IOException {
+        processor.process(reader("x".repeat(1100) + "\n"), new StringWriter());
+
+        assertThat(log.getAll()).contains("x".repeat(1000) + "…").doesNotContain("x".repeat(1001));
+    }
+
+    @Test
+    void stopsWhenTheServiceFails() {
+        when(service.process(any())).thenThrow(new DataAccessResourceFailureException("database down"));
+
+        // a system failure is not a bad line: continuing could decide the next loads on a broken database
+        assertThatThrownBy(() -> processor.process(reader("""
+                {"id":"1","customer_id":"c","load_amount":"$1.00","time":"2000-01-01T00:00:00Z"}
+                {"id":"2","customer_id":"c","load_amount":"$1.00","time":"2000-01-01T00:00:01Z"}
+                """), new StringWriter()))
+                .isInstanceOf(DataAccessResourceFailureException.class);
+        verify(service).process(any());
+        verifyNoMoreInteractions(service);
+    }
+
+    private static BufferedReader reader(String text) {
+        return new BufferedReader(new StringReader(text));
     }
 }
