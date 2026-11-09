@@ -8,6 +8,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
 import java.time.ZoneOffset;
+import java.util.Optional;
 import java.util.Set;
 
 @Repository
@@ -19,16 +20,15 @@ public class LoadAttemptRepository {
         this.jdbcClient = jdbcClient;
     }
 
-    public boolean exists(String customerId, String id) {
-        // not SELECT EXISTS: H2 2.4 caches that result per session, so a row inserted in the same transaction is missed
+    public Optional<LoadAttempt> find(String customerId, String id) {
         return jdbcClient.sql("""
-                        SELECT COUNT(*) FROM load_attempt
+                        SELECT customer_id, id, amount, loaded_at, accepted FROM load_attempt
                         WHERE customer_id = :customerId AND id = :id
                         """)
                 .param("customerId", customerId)
                 .param("id", id)
-                .query(Long.class)
-                .single() > 0;
+                .query(LoadAttempt.class)
+                .optional();
     }
 
     public CustomerUsage usage(String customerId, UsageWindows windows) {

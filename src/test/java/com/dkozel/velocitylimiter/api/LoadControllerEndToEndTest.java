@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.web.servlet.assertj.MockMvcTester;
+import org.springframework.test.web.servlet.assertj.MvcTestResult;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
@@ -50,6 +51,36 @@ class LoadControllerEndToEndTest {
 
         assertThat(stored).isEqualTo(new LoadAttempt(
                 "e2e-customer", "1", new BigDecimal("3318.47"), Instant.parse("2000-01-01T00:00:00Z"), true));
+    }
+
+    @Test
+    void answersARetryWithTheOriginalDecision() {
+        String load = """
+                {"id":"1","customer_id":"e2e-retry","load_amount":"$100.00","time":"2000-01-01T00:00:00Z"}
+                """;
+        post(load);
+
+        // a client that timed out learns whether the money was loaded; nothing new is decided
+        assertThat(post(load)).hasStatusOk()
+                .hasHeader("Idempotent-Replayed", "true")
+                .bodyJson().isStrictlyEqualTo("""
+                {"id":"1","customer_id":"e2e-retry","accepted":true}
+                """);
+    }
+
+    @Test
+    void refusesARepeatedIdWithDifferentData() {
+        post("""
+                {"id":"1","customer_id":"e2e-conflict","load_amount":"$100.00","time":"2000-01-01T00:00:00Z"}
+                """);
+
+        assertThat(post("""
+                {"id":"1","customer_id":"e2e-conflict","load_amount":"$200.00","time":"2000-01-01T00:00:00Z"}
+                """)).hasStatus(HttpStatus.CONFLICT)
+                .hasContentType(MediaType.APPLICATION_PROBLEM_JSON)
+                .bodyJson().isLenientlyEqualTo("""
+                {"status": 409, "detail": "This load id was already used for this customer with a different amount or time."}
+                """);
     }
 
     @Test
@@ -126,5 +157,9 @@ class LoadControllerEndToEndTest {
                 .bodyJson().isLenientlyEqualTo("""
             {"detail": "Failed to read request"}
             """);
+    }
+
+    private MvcTestResult post(String body) {
+        return mvc.post().uri("/loads").contentType(MediaType.APPLICATION_JSON).content(body).exchange();
     }
 }

@@ -118,7 +118,9 @@ Invoke-RestMethod -Method Post -Uri http://localhost:8080/loads -ContentType 'ap
 ```
 
 - `200` with `{"id":"1","customer_id":"528","accepted":true}` (or `false` when a limit is exceeded).
-- `204` for a repeated load id of the same customer.
+- `200` with the **original** answer and the header `Idempotent-Replayed: true` when the same load (same customer,
+  id, amount and time) is sent again, e.g. a retry after a timeout. Nothing new is decided or stored.
+- `409` (`application/problem+json`) when the same customer and id come with a different amount or time.
 - `400` as `application/problem+json` (RFC 9457) listing every invalid field, e.g.
   `"errors": [{"pointer": "#/load_amount", "detail": "must be a positive dollar amount …"}]`.
 - `503` with `Retry-After: 1` when another load of the same customer holds its lock for over a second.
@@ -133,5 +135,3 @@ Health check: `http://localhost:8080/actuator/health`. Stop the service with `do
 - **Standard output is not atomic:** answers stream out as they are decided; use `--output` for an all-or-nothing
   file.
 - **One very long line** is read whole into memory; a production reader would cap the line length.
-- **`POST /loads` answers a repeated id with `204`**, so a client retrying after a timeout can't tell whether the
-  first attempt was accepted.

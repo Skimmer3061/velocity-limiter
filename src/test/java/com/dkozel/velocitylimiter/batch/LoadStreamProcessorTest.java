@@ -2,6 +2,7 @@ package com.dkozel.velocitylimiter.batch;
 
 import com.dkozel.velocitylimiter.domain.LoadCommand;
 import com.dkozel.velocitylimiter.domain.LoadDecision;
+import com.dkozel.velocitylimiter.domain.LoadOutcome;
 import com.dkozel.velocitylimiter.service.LoadService;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
@@ -21,7 +22,6 @@ import java.io.StringReader;
 import java.io.StringWriter;
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -51,22 +51,26 @@ class LoadStreamProcessorTest {
             new LoadStreamProcessor(service, JSON, VALIDATOR, new BatchProperties(100L));
 
     @Test
-    void writesNothingForADuplicateAndContinues() throws IOException {
+    void writesNothingForARepeatedIdAndContinues() throws IOException {
+        // the task: a repeated id gets no answer, whether it is a retry or the same id with other data
         when(service.process(any()))
-                .thenReturn(Optional.empty())
-                .thenReturn(Optional.of(new LoadDecision("c", "2", true)));
+                .thenReturn(new LoadOutcome.Replayed(new LoadDecision("c", "1", true)))
+                .thenReturn(new LoadOutcome.Conflicting(new LoadDecision("c", "1", true)))
+                .thenReturn(new LoadOutcome.Decided(new LoadDecision("c", "2", true)));
         StringWriter output = new StringWriter();
 
         BatchSummary summary = processor.process(reader("""
                 {"id":"1","customer_id":"c","load_amount":"$1.00","time":"2000-01-01T00:00:00Z"}
+                {"id":"1","customer_id":"c","load_amount":"$2.00","time":"2000-01-01T00:00:00Z"}
                 {"id":"2","customer_id":"c","load_amount":"$1.00","time":"2000-01-01T00:00:01Z"}
                 """), output);
 
         assertThat(output).hasToString("""
                 {"id":"2","customer_id":"c","accepted":true}
                 """);
-        assertThat(summary).isEqualTo(new BatchSummary(2, 1, 0, 1, 0));
+        assertThat(summary).isEqualTo(new BatchSummary(3, 1, 0, 2, 0));
         verify(service).process(new LoadCommand("c", "1", new BigDecimal("1.00"), Instant.parse("2000-01-01T00:00:00Z")));
+        verify(service).process(new LoadCommand("c", "1", new BigDecimal("2.00"), Instant.parse("2000-01-01T00:00:00Z")));
         verify(service).process(new LoadCommand("c", "2", new BigDecimal("1.00"), Instant.parse("2000-01-01T00:00:01Z")));
         verifyNoMoreInteractions(service);
     }
@@ -74,8 +78,8 @@ class LoadStreamProcessorTest {
     @Test
     void skipsEachBadLineWithAWarningAndDecidesTheRest(CapturedOutput log) throws IOException {
         when(service.process(any()))
-                .thenReturn(Optional.of(new LoadDecision("c", "1", true)))
-                .thenReturn(Optional.of(new LoadDecision("c", "5", false)));
+                .thenReturn(new LoadOutcome.Decided(new LoadDecision("c", "1", true)))
+                .thenReturn(new LoadOutcome.Decided(new LoadDecision("c", "5", false)));
         StringWriter output = new StringWriter();
 
         BatchSummary summary = processor.process(reader("""
@@ -104,7 +108,7 @@ class LoadStreamProcessorTest {
 
     @Test
     void ignoresAByteOrderMarkAtTheStartOfTheFile() throws IOException {
-        when(service.process(any())).thenReturn(Optional.of(new LoadDecision("c", "1", true)));
+        when(service.process(any())).thenReturn(new LoadOutcome.Decided(new LoadDecision("c", "1", true)));
         StringWriter output = new StringWriter();
 
         // some Windows tools start a UTF-8 file with U+FEFF; it is not part of the first load
@@ -122,7 +126,7 @@ class LoadStreamProcessorTest {
 
     @Test
     void countsAFirstLineWithOnlyAByteOrderMarkAsBlank() throws IOException {
-        when(service.process(any())).thenReturn(Optional.of(new LoadDecision("c", "1", true)));
+        when(service.process(any())).thenReturn(new LoadOutcome.Decided(new LoadDecision("c", "1", true)));
 
         // the mark is removed before the blank check, so the line is not rejected as broken JSON
         BatchSummary summary = processor.process(reader("\uFEFF\n" + """
@@ -134,7 +138,7 @@ class LoadStreamProcessorTest {
 
     @Test
     void rejectsAByteOrderMarkInsideTheFile(CapturedOutput log) throws IOException {
-        when(service.process(any())).thenReturn(Optional.of(new LoadDecision("c", "1", true)));
+        when(service.process(any())).thenReturn(new LoadOutcome.Decided(new LoadDecision("c", "1", true)));
 
         // only the very start of a file can carry a byte order mark; anywhere else the line is damaged
         BatchSummary summary = processor.process(reader("""
@@ -212,7 +216,7 @@ class LoadStreamProcessorTest {
 
     @Test
     void stopsAtTheFirstBadLineOverTheLimit() {
-        when(service.process(any())).thenReturn(Optional.of(new LoadDecision("c", "1", true)));
+        when(service.process(any())).thenReturn(new LoadOutcome.Decided(new LoadDecision("c", "1", true)));
         LoadStreamProcessor limitOfTwo = new LoadStreamProcessor(service, JSON, VALIDATOR, new BatchProperties(2L));
 
         // a wrong or corrupt file fails fast instead of logging a WARN for every line
@@ -236,7 +240,7 @@ class LoadStreamProcessorTest {
     void stopsWhenTheServiceFailsAndNamesTheLine() {
         DataAccessResourceFailureException databaseDown = new DataAccessResourceFailureException("database down");
         when(service.process(any()))
-                .thenReturn(Optional.of(new LoadDecision("c", "1", true)))
+                .thenReturn(new LoadOutcome.Decided(new LoadDecision("c", "1", true)))
                 .thenThrow(databaseDown);
 
         // a system failure is not a bad line: continuing could decide the next loads on a broken database
