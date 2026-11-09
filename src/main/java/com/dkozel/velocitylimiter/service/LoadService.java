@@ -9,6 +9,8 @@ import com.dkozel.velocitylimiter.domain.VelocityLimits;
 import com.dkozel.velocitylimiter.domain.Violation;
 import com.dkozel.velocitylimiter.repository.CustomerRepository;
 import com.dkozel.velocitylimiter.repository.LoadAttemptRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,6 +22,8 @@ import java.util.stream.Collectors;
 
 @Service
 public class LoadService {
+
+    private static final Logger log = LoggerFactory.getLogger(LoadService.class);
 
     private final CustomerRepository customerRepository;
     private final LoadAttemptRepository loadAttemptRepository;
@@ -39,6 +43,7 @@ public class LoadService {
         // one load per customer at a time; stays first, so the duplicate check, usage read and inserts all run under it
         customerRepository.lock(command.customerId());
         if (loadAttemptRepository.exists(command.customerId(), command.id())) {
+            log.debug("Duplicate load ignored: customerId={}, id={}", command.customerId(), command.id());
             return Optional.empty();
         }
         CustomerUsage usage = loadAttemptRepository.usage(
@@ -51,6 +56,8 @@ public class LoadService {
         loadAttemptRepository.insert(new LoadAttempt(
                 command.customerId(), command.id(), command.amount(), command.loadedAt(), accepted));
         loadAttemptRepository.insertViolations(command.customerId(), command.id(), violations);
+        log.debug("Load decided: customerId={}, id={}, accepted={}, violations={}",
+                command.customerId(), command.id(), accepted, violations);
         return Optional.of(new LoadDecision(command.customerId(), command.id(), accepted));
     }
 }

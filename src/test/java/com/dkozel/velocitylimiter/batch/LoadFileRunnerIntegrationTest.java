@@ -131,6 +131,9 @@ class LoadFileRunnerIntegrationTest {
         // key=value, so log tools can parse it; the blank line is read but not decided, the repeat is a duplicate
         assertThat(captured.getAll())
                 .contains("Batch finished: input=" + input + ", lines=3, accepted=1, declined=0, duplicates=1, rejected=0, durationMs=");
+        // log times are UTC like the data, even though the tests run in UTC+14 (build.gradle)
+        assertThat(captured.getAll().lines().filter(line -> line.contains("Batch finished")))
+                .singleElement().asString().matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z .*");
     }
 
     // starts the real application the way `java -jar ... --spring.profiles.active=batch` does
