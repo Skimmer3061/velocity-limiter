@@ -57,7 +57,12 @@ public class LoadStreamProcessor {
                 }
                 continue;
             }
-            Optional<LoadDecision> decision = loadService.process(request.get().toCommand());
+            Optional<LoadDecision> decision;
+            try {
+                decision = loadService.process(request.get().toCommand());
+            } catch (RuntimeException failure) {
+                throw new BatchProcessingException(lines, failure);
+            }
             if (decision.isEmpty()) {
                 duplicates++;
                 continue;

@@ -27,6 +27,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
@@ -149,16 +150,22 @@ class LoadStreamProcessorTest {
     }
 
     @Test
-    void stopsWhenTheServiceFails() {
-        when(service.process(any())).thenThrow(new DataAccessResourceFailureException("database down"));
+    void stopsWhenTheServiceFailsAndNamesTheLine() {
+        DataAccessResourceFailureException databaseDown = new DataAccessResourceFailureException("database down");
+        when(service.process(any()))
+                .thenReturn(Optional.of(new LoadDecision("c", "1", true)))
+                .thenThrow(databaseDown);
 
         // a system failure is not a bad line: continuing could decide the next loads on a broken database
         assertThatThrownBy(() -> processor.process(reader("""
                 {"id":"1","customer_id":"c","load_amount":"$1.00","time":"2000-01-01T00:00:00Z"}
                 {"id":"2","customer_id":"c","load_amount":"$1.00","time":"2000-01-01T00:00:01Z"}
+                {"id":"3","customer_id":"c","load_amount":"$1.00","time":"2000-01-01T00:00:02Z"}
                 """), new StringWriter()))
-                .isInstanceOf(DataAccessResourceFailureException.class);
-        verify(service).process(any());
+                .isInstanceOf(BatchProcessingException.class)
+                .hasMessage("Processing stopped at line 2")
+                .cause().isSameAs(databaseDown); // the original error, stack trace included, is kept
+        verify(service, times(2)).process(any());
         verifyNoMoreInteractions(service);
     }
 
