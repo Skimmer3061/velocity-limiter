@@ -27,6 +27,9 @@ class LoadAttemptRepositoryIntegrationTest {
     LoadAttemptRepository repository;
 
     @Autowired
+    CustomerRepository customerRepository;
+
+    @Autowired
     JdbcClient jdbcClient;
 
     @Test
@@ -69,6 +72,7 @@ class LoadAttemptRepositoryIntegrationTest {
     }
 
     private void insert(String customerId, String id, String amount, String time, boolean accepted) {
+        customerRepository.lock(customerId); // the foreign key needs the customer row, as in the service
         repository.insert(new LoadAttempt(customerId, id, new BigDecimal(amount), Instant.parse(time), accepted));
     }
 }
