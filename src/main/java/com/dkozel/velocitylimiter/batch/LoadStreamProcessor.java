@@ -31,11 +31,13 @@ public class LoadStreamProcessor {
     private final LoadService loadService;
     private final JsonMapper jsonMapper;
     private final Validator validator;
+    private final long maxRejectedLines;
 
-    LoadStreamProcessor(LoadService loadService, JsonMapper jsonMapper, Validator validator) {
+    LoadStreamProcessor(LoadService loadService, JsonMapper jsonMapper, Validator validator, BatchProperties batchProperties) {
         this.loadService = loadService;
         this.jsonMapper = jsonMapper;
         this.validator = validator;
+        this.maxRejectedLines = batchProperties.maxRejectedLines();
     }
 
     public BatchSummary process(BufferedReader input, Writer output) throws IOException {
@@ -49,6 +51,10 @@ public class LoadStreamProcessor {
             Optional<LoadRequest> request = read(line, lines);
             if (request.isEmpty()) {
                 rejected++;
+                if (rejected > maxRejectedLines) {
+                    throw new RejectedLinesException("over " + maxRejectedLines
+                            + " lines rejected (batch.max-rejected-lines), processing stopped at line " + lines);
+                }
                 continue;
             }
             Optional<LoadDecision> decision = loadService.process(request.get().toCommand());

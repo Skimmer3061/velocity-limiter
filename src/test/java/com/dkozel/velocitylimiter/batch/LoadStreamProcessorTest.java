@@ -46,7 +46,8 @@ class LoadStreamProcessorTest {
 
     private final LoadService service = mock(LoadService.class);
 
-    private final LoadStreamProcessor processor = new LoadStreamProcessor(service, JSON, VALIDATOR);
+    private final LoadStreamProcessor processor =
+            new LoadStreamProcessor(service, JSON, VALIDATOR, new BatchProperties(100L));
 
     @Test
     void writesNothingForADuplicateAndContinues() throws IOException {
@@ -114,6 +115,37 @@ class LoadStreamProcessorTest {
         processor.process(reader("x".repeat(1100) + "\n"), new StringWriter());
 
         assertThat(log.getAll()).contains("x".repeat(1000) + "…").doesNotContain("x".repeat(1001));
+    }
+
+    @Test
+    void allowsAsManyBadLinesAsTheLimit() throws IOException {
+        var strict = new LoadStreamProcessor(service, JSON, VALIDATOR, new BatchProperties(2L));
+
+        BatchSummary summary = strict.process(reader("""
+                not json
+                not json
+                """), new StringWriter());
+
+        assertThat(summary.rejected()).isEqualTo(2);
+    }
+
+    @Test
+    void stopsAtTheFirstBadLineOverTheLimit() {
+        when(service.process(any())).thenReturn(Optional.of(new LoadDecision("c", "1", true)));
+        var strict = new LoadStreamProcessor(service, JSON, VALIDATOR, new BatchProperties(2L));
+
+        // a wrong or corrupt file fails fast instead of logging a WARN for every line
+        assertThatThrownBy(() -> strict.process(reader("""
+                {"id":"1","customer_id":"c","load_amount":"$1.00","time":"2000-01-01T00:00:00Z"}
+                not json
+                not json
+                not json
+                {"id":"5","customer_id":"c","load_amount":"$1.00","time":"2000-01-01T00:00:04Z"}
+                """), new StringWriter()))
+                .isInstanceOf(RejectedLinesException.class)
+                .hasMessage("over 2 lines rejected (batch.max-rejected-lines), processing stopped at line 4");
+        verify(service).process(new LoadCommand("c", "1", new BigDecimal("1.00"), Instant.parse("2000-01-01T00:00:00Z")));
+        verifyNoMoreInteractions(service);
     }
 
     @Test
