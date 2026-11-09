@@ -1,5 +1,7 @@
 package com.dkozel.velocitylimiter.batch;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Profile;
@@ -13,11 +15,14 @@ import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.List;
 
 @Component
 @Profile("batch")
 class LoadFileRunner implements ApplicationRunner {
+
+    private static final Logger log = LoggerFactory.getLogger(LoadFileRunner.class);
 
     private final LoadStreamProcessor processor;
 
@@ -32,19 +37,27 @@ class LoadFileRunner implements ApplicationRunner {
         if (outputPath != null && Files.exists(outputPath) && Files.isSameFile(inputPath, outputPath)) {
             throw new IllegalArgumentException("--output must not be the same file as --input");
         }
+        long started = System.nanoTime();
+        BatchSummary summary;
         try (BufferedReader input = Files.newBufferedReader(inputPath)) {
             if (outputPath != null) {
                 try (Writer output = Files.newBufferedWriter(outputPath)) {
-                    processor.process(input, output);
+                    summary = processor.process(input, output);
                 }
             } else {
                 Writer stdout = new BufferedWriter(new OutputStreamWriter(System.out, StandardCharsets.UTF_8));
                 try {
-                    processor.process(input, stdout);
+                    summary = processor.process(input, stdout);
                 } finally {
                     stdout.flush(); // flush, don't close: System.out isn't ours to close
                 }
             }
+        }
+        log.info("Batch finished: input={}, lines={}, accepted={}, declined={}, duplicates={}, rejected={}, durationMs={}",
+                inputPath, summary.lines(), summary.accepted(), summary.declined(), summary.duplicates(),
+                summary.rejected(), Duration.ofNanos(System.nanoTime() - started).toMillis());
+        if (summary.rejected() > 0) {
+            throw new RejectedLinesException(summary.rejected());
         }
     }
 

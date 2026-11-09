@@ -74,13 +74,27 @@ class LoadFileRunnerIntegrationTest {
     }
 
     @Test
-    void skipsABadLineAndWritesTheOtherAnswers() throws Exception {
+    void writesTheOtherAnswersThenFailsTheRunWhenALineWasRejected() throws Exception {
         Path input = Files.writeString(dir.resolve("input.txt"), "not json\n" + LOAD);
+        Path output = dir.resolve("output.txt");
+
+        // the run reports failure so a scheduler notices, but only after every valid line was answered
+        assertThatThrownBy(() -> runBatch("--input=" + input, "--output=" + output))
+                .isInstanceOf(RejectedLinesException.class)
+                .hasMessage("1 line(s) rejected, see the WARN log lines");
+        assertThat(Files.readString(output)).isEqualTo(ANSWER);
+    }
+
+    @Test
+    void logsASummaryOfTheRun(CapturedOutput captured) throws Exception {
+        Path input = Files.writeString(dir.resolve("input.txt"), LOAD + "\n" + LOAD);
         Path output = dir.resolve("output.txt");
 
         runBatch("--input=" + input, "--output=" + output);
 
-        assertThat(Files.readString(output)).isEqualTo(ANSWER);
+        // key=value, so log tools can parse it; the blank line is read but not decided, the repeat is a duplicate
+        assertThat(captured.getAll())
+                .contains("Batch finished: input=" + input + ", lines=3, accepted=1, declined=0, duplicates=1, rejected=0, durationMs=");
     }
 
     // starts the real application the way `java -jar ... --spring.profiles.active=batch` does

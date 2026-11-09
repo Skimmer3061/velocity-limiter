@@ -25,12 +25,12 @@ import java.util.stream.Collectors;
 @Component
 public class LoadStreamProcessor {
 
+    private static final Logger log = LoggerFactory.getLogger(LoadStreamProcessor.class);
+    private static final int LOGGED_LINE_MAX_LENGTH = 1000;
+
     private final LoadService loadService;
     private final JsonMapper jsonMapper;
     private final Validator validator;
-
-    private static final Logger log = LoggerFactory.getLogger(LoadStreamProcessor.class);
-    private static final int LOGGED_LINE_MAX_LENGTH = 1000;
 
     LoadStreamProcessor(LoadService loadService, JsonMapper jsonMapper, Validator validator) {
         this.loadService = loadService;
