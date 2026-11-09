@@ -8,8 +8,10 @@ import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -35,6 +37,42 @@ class LoadFileRunnerIntegrationTest {
         runBatch("--input=" + input, "--output=" + output);
 
         assertThat(Files.readString(output)).isEqualTo(ANSWER);
+        assertThat(dir).isDirectoryNotContaining("glob:**.tmp"); // the temporary file became the output
+    }
+
+    @Test
+    void replacesAnExistingOutputFile() throws Exception {
+        Path input = Files.writeString(dir.resolve("input.txt"), LOAD);
+        Path output = Files.writeString(dir.resolve("output.txt"), "answers of an earlier run\n");
+
+        runBatch("--input=" + input, "--output=" + output);
+
+        assertThat(Files.readString(output)).isEqualTo(ANSWER);
+    }
+
+    @Test
+    void leavesNoOutputWhenTheRunStops() throws Exception {
+        Path input = Files.writeString(dir.resolve("input.txt"), LOAD + "not json\n");
+        Path output = dir.resolve("output.txt");
+
+        // a limit of 0 stops the run at the bad line, after the first answer was already written
+        assertThatThrownBy(() -> runBatch("--input=" + input, "--output=" + output, "--batch.max-rejected-lines=0"))
+                .isInstanceOf(RejectedLinesException.class);
+
+        // no partial file that looks finished, and no temporary file left behind
+        assertThat(output).doesNotExist();
+        assertThat(dir).isDirectoryNotContaining("glob:**.tmp");
+    }
+
+    @Test
+    void keepsTheExistingOutputWhenTheRunStops() throws Exception {
+        Path input = Files.writeString(dir.resolve("input.txt"), LOAD + "not json\n");
+        Path output = Files.writeString(dir.resolve("output.txt"), "answers of an earlier run\n");
+
+        assertThatThrownBy(() -> runBatch("--input=" + input, "--output=" + output, "--batch.max-rejected-lines=0"))
+                .isInstanceOf(RejectedLinesException.class);
+
+        assertThat(Files.readString(output)).isEqualTo("answers of an earlier run\n");
     }
 
     @Test
@@ -74,13 +112,59 @@ class LoadFileRunnerIntegrationTest {
     }
 
     @Test
-    void keepsTheAnswersDecidedBeforeAFailure() throws Exception {
-        Path input = Files.writeString(dir.resolve("input.txt"), LOAD + "not json\n");
+    void refusesAnInputThatIsTheTemporaryFileOfTheOutput() throws Exception {
+        Path input = Files.writeString(dir.resolve("output.txt.tmp"), LOAD);
+
+        // writing the temporary file would empty the input while it is read, then rename it away
+        assertThatThrownBy(() -> runBatch("--input=" + input, "--output=" + dir.resolve("output.txt")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("--input must not be the temporary file of --output");
+        assertThat(Files.readString(input)).isEqualTo(LOAD);
+    }
+
+    @Test
+    void rejectsALineThatIsNotValidUtf8AndGoesOn(CapturedOutput captured) throws Exception {
+        // "José" saved as Windows-1252: the byte 0xE9 is not valid UTF-8
+        byte[] latin1Line = """
+                {"id":"2","customer_id":"Jos\u00e9","load_amount":"$1.00","time":"2000-01-01T00:00:01Z"}
+                """.getBytes(StandardCharsets.ISO_8859_1);
+        Path input = dir.resolve("input.txt");
+        Files.write(input, latin1Line);
+        Files.writeString(input, LOAD, StandardOpenOption.APPEND);
         Path output = dir.resolve("output.txt");
 
-        assertThatThrownBy(() -> runBatch("--input=" + input, "--output=" + output));
+        assertThatThrownBy(() -> runBatch("--input=" + input, "--output=" + output))
+                .isInstanceOf(RejectedLinesException.class);
 
+        assertThat(captured.getAll()).contains("Line 1 rejected: not valid UTF-8");
         assertThat(Files.readString(output)).isEqualTo(ANSWER);
+    }
+
+    @Test
+    void writesTheOtherAnswersThenFailsTheRunWhenALineWasRejected(CapturedOutput captured) throws Exception {
+        Path input = Files.writeString(dir.resolve("input.txt"), "not json\n" + LOAD);
+        Path output = dir.resolve("output.txt");
+
+        assertThatThrownBy(() -> runBatch("--input=" + input, "--output=" + output))
+                .isInstanceOf(RejectedLinesException.class)
+                .hasMessage("1 line(s) rejected, see the WARN log lines");
+        assertThat(Files.readString(output)).isEqualTo(ANSWER);
+        assertThat(captured.getAll()).contains("lines=2, accepted=1, declined=0, duplicates=0, rejected=1");
+    }
+
+    @Test
+    void logsASummaryOfTheRun(CapturedOutput captured) throws Exception {
+        Path input = Files.writeString(dir.resolve("input.txt"), LOAD + "\n" + LOAD);
+        Path output = dir.resolve("output.txt");
+
+        runBatch("--input=" + input, "--output=" + output);
+
+        // key=value, so log tools can parse it; the blank line is read but not decided, the repeat is a duplicate
+        assertThat(captured.getAll())
+                .contains("Batch finished: input=" + input + ", lines=3, accepted=1, declined=0, duplicates=1, rejected=0, durationMs=");
+        // log times are UTC like the data, even though the tests run in UTC+14 (build.gradle)
+        assertThat(captured.getAll().lines().filter(line -> line.contains("Batch finished")))
+                .singleElement().asString().matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z .*");
     }
 
     // starts the real application the way `java -jar ... --spring.profiles.active=batch` does
