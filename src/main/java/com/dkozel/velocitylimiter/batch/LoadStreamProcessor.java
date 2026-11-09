@@ -33,12 +33,14 @@ public class LoadStreamProcessor {
     private final JsonMapper jsonMapper;
     private final Validator validator;
     private final long maxRejectedLines;
+    private final int maxLineLength;
 
     LoadStreamProcessor(LoadService loadService, JsonMapper jsonMapper, Validator validator, BatchProperties batchProperties) {
         this.loadService = loadService;
         this.jsonMapper = jsonMapper;
         this.validator = validator;
         this.maxRejectedLines = batchProperties.maxRejectedLines();
+        this.maxLineLength = batchProperties.maxLineLength();
     }
 
     public BatchSummary process(BufferedReader input, Writer output) throws IOException {
@@ -47,17 +49,21 @@ public class LoadStreamProcessor {
         long declined = 0;
         long duplicates = 0;
         long rejected = 0;
-        String line;
-        while ((line = input.readLine()) != null) {
+        BoundedLineReader lineReader = new BoundedLineReader(input, maxLineLength);
+        BoundedLineReader.Line next;
+        while ((next = lineReader.next()) != null) {
             lines++;
+            String line = next.text();
             if (lines == 1 && line.startsWith("\uFEFF")) {
                 // a UTF-8 byte order mark that some Windows tools write; not part of the data
                 line = line.substring(1);
             }
-            if (line.isBlank()) {
+            if (!next.tooLong() && line.isBlank()) {
                 continue;
             }
-            Optional<LoadRequest> request = read(line, lines);
+            Optional<LoadRequest> request = next.tooLong()
+                    ? reject(lines, "longer than " + maxLineLength + " characters (batch.max-line-length)", line)
+                    : read(line, lines);
             if (request.isEmpty()) {
                 rejected++;
                 if (rejected > maxRejectedLines) {
