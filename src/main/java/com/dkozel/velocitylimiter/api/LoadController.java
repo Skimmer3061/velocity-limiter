@@ -1,6 +1,7 @@
 package com.dkozel.velocitylimiter.api;
 
 import com.dkozel.velocitylimiter.service.LoadService;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -18,7 +19,7 @@ class LoadController {
     }
 
     @PostMapping
-    ResponseEntity<LoadResponse> load(@RequestBody LoadRequest request) {
+    ResponseEntity<LoadResponse> load(@Valid @RequestBody LoadRequest request) {
         return loadService.process(request.toCommand())
                 .map(LoadResponse::from)
                 .map(ResponseEntity::ok)
