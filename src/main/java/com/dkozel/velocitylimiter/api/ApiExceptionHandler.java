@@ -2,7 +2,7 @@ package com.dkozel.velocitylimiter.api;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.dao.CannotAcquireLockException;
+import org.springframework.dao.TransientDataAccessException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -27,8 +27,9 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
 
-    @ExceptionHandler(CannotAcquireLockException.class)
-    ResponseEntity<ProblemDetail> handleBusyCustomer(CannotAcquireLockException ex) {
+    // Spring's "retry may succeed" category; a real H2 lock timeout arrives as its QueryTimeoutException subclass
+    @ExceptionHandler(TransientDataAccessException.class)
+    ResponseEntity<ProblemDetail> handleBusyCustomer(TransientDataAccessException ex) {
         log.warn("Customer lock timed out, answered 503: {}", ex.getMessage());
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE,
                 "Another load for this customer is in progress; retry shortly.");

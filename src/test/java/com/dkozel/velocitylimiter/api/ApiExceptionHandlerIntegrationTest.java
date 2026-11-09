@@ -2,12 +2,16 @@ package com.dkozel.velocitylimiter.api;
 
 import com.dkozel.velocitylimiter.service.LoadService;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.dao.CannotAcquireLockException;
+import org.springframework.dao.QueryTimeoutException;
+import org.springframework.dao.TransientDataAccessException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -34,9 +38,11 @@ class ApiExceptionHandlerIntegrationTest {
     @MockitoBean
     LoadService loadService;
 
-    @Test
-    void asksTheClientToRetryWhenTheCustomerIsBusy() {
-        when(loadService.process(any())).thenThrow(new CannotAcquireLockException("lock timeout"));
+    // QueryTimeoutException is what a real H2 lock timeout becomes; any transient data access failure is a 503
+    @ParameterizedTest
+    @ValueSource(classes = {QueryTimeoutException.class, CannotAcquireLockException.class})
+    void asksTheClientToRetryWhenTheCustomerIsBusy(Class<? extends TransientDataAccessException> timeout) throws Exception {
+        when(loadService.process(any())).thenThrow(timeout.getConstructor(String.class).newInstance("lock timeout"));
 
         assertThat(postValidLoad()).hasStatus(HttpStatus.SERVICE_UNAVAILABLE)
                 .hasContentType(MediaType.APPLICATION_PROBLEM_JSON)

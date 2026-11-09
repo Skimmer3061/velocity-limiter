@@ -11,6 +11,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.stubbing.Answer;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.dao.QueryTimeoutException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 
@@ -19,6 +20,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -93,6 +95,41 @@ class LoadServiceConcurrencyIntegrationTest {
         assertThat(processConcurrently(load, load))
                 .containsExactlyInAnyOrder(new LoadOutcome.Decided(new LoadDecision(CUSTOMER, "1", true)),
                         new LoadOutcome.Replayed(new LoadDecision(CUSTOMER, "1", true)));
+        assertThat(jdbcClient.sql("SELECT COUNT(*) FROM load_attempt WHERE customer_id = :customerId")
+                .param("customerId", CUSTOMER)
+                .query(Long.class)
+                .single()).isOne();
+    }
+
+    @Test
+    void failsTheLoadThatWaitsForTheCustomerLongerThanTheLockTimeout() throws Exception {
+        // whichever load locks the customer first holds the lock 1.5 s, past the 1 s lock timeout
+        doAnswer(invocation -> {
+            Object result = invocation.callRealMethod();
+            Thread.sleep(1500);
+            return result;
+        }).when(repository).usage(any(), any());
+        LoadCommand first = new LoadCommand(CUSTOMER, "1", new BigDecimal("100.00"), WEDNESDAY);
+        LoadCommand second = new LoadCommand(CUSTOMER, "2", new BigDecimal("100.00"), WEDNESDAY);
+
+        List<Future<LoadOutcome>> results;
+        try (ExecutorService threads = Executors.newFixedThreadPool(2)) {
+            results = threads.invokeAll(List.of(() -> service.process(first), () -> service.process(second)));
+        }
+
+        // the real H2 timeout arrives as Spring's QueryTimeoutException, a TransientDataAccessException (503 over HTTP)
+        List<Object> outcomes = new ArrayList<>();
+        for (Future<LoadOutcome> result : results) {
+            try {
+                outcomes.add(result.get());
+            } catch (ExecutionException failure) {
+                outcomes.add(failure.getCause());
+            }
+        }
+        assertThat(outcomes).hasSize(2)
+                .anySatisfy(outcome -> assertThat(outcome).isInstanceOf(LoadOutcome.Decided.class))
+                .anySatisfy(outcome -> assertThat(outcome).isInstanceOf(QueryTimeoutException.class));
+        // the timed-out load left nothing behind
         assertThat(jdbcClient.sql("SELECT COUNT(*) FROM load_attempt WHERE customer_id = :customerId")
                 .param("customerId", CUSTOMER)
                 .query(Long.class)

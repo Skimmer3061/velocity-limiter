@@ -37,6 +37,7 @@ class LoadControllerEndToEndTest {
                 """);
 
         assertThat(response).hasStatusOk()
+                .doesNotContainHeader("Idempotent-Replayed") // a first decision is not a replay
                 .bodyJson().isStrictlyEqualTo("""
                 {"id":"1","customer_id":"e2e-customer","accepted":true}
                 """);
@@ -51,6 +52,17 @@ class LoadControllerEndToEndTest {
 
         assertThat(stored).isEqualTo(new LoadAttempt(
                 "e2e-customer", "1", new BigDecimal("3318.47"), Instant.parse("2000-01-01T00:00:00Z"), true));
+    }
+
+    @Test
+    void answersADeclinedLoadWithAcceptedFalse() {
+        // a decline is a normal answer (200), not an error
+        assertThat(post("""
+                {"id":"1","customer_id":"e2e-declined","load_amount":"$5000.01","time":"2000-01-01T00:00:00Z"}
+                """)).hasStatusOk()
+                .bodyJson().isStrictlyEqualTo("""
+                {"id":"1","customer_id":"e2e-declined","accepted":false}
+                """);
     }
 
     @Test
