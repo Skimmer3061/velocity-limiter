@@ -89,6 +89,22 @@ class LoadFileRunnerIntegrationTest {
     }
 
     @Test
+    void failsClearlyWhenTheInputFileDoesNotExist() {
+        Path missing = dir.resolve("missing.txt");
+
+        assertThatThrownBy(() -> runBatch("--input=" + missing))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("--input file not found: " + missing);
+    }
+
+    @Test
+    void refusesAFolderAsInput() {
+        assertThatThrownBy(() -> runBatch("--input=" + dir))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("--input file not found: " + dir);
+    }
+
+    @Test
     void failsWithoutAnInputOption() {
         assertThatThrownBy(LoadFileRunnerIntegrationTest::runBatch)
                 .isInstanceOf(IllegalArgumentException.class)
